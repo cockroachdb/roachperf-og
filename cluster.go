@@ -54,9 +54,9 @@ func (c *cluster) startNode(host, join string) ([]byte, error) {
 }
 
 func (c *cluster) start() {
-	fmt.Printf("%s: starting\n", c.name)
+	display := fmt.Sprintf("%s: starting", c.name)
 	host1 := c.host(1)
-	c.parallel(1, c.count, func(host string, _ func(float64)) ([]byte, error) {
+	c.parallel(display, 1, c.count, func(host string) ([]byte, error) {
 		return c.startNode(host, host1)
 	})
 }
@@ -73,10 +73,8 @@ func (c *cluster) stopNode(host string) ([]byte, error) {
 }
 
 func (c *cluster) stop() {
-	fmt.Printf("%s: stopping\n", c.name)
-	c.parallel(1, c.total, func(host string, _ func(float64)) ([]byte, error) {
-		return c.stopNode(host)
-	})
+	display := fmt.Sprintf("%s: stopping", c.name)
+	c.parallel(display, 1, c.total, c.stopNode)
 }
 
 func (c *cluster) wipeNode(host string) ([]byte, error) {
@@ -99,10 +97,8 @@ func (c *cluster) wipe() {
 	if c.loadGen != 0 {
 		c.stopLoad()
 	}
-	fmt.Printf("%s: wiping\n", c.name)
-	c.parallel(1, c.total, func(host string, _ func(float64)) ([]byte, error) {
-		return c.wipeNode(host)
-	})
+	display := fmt.Sprintf("%s: wiping", c.name)
+	c.parallel(display, 1, c.total, c.wipeNode)
 }
 
 func (c *cluster) status() {
@@ -183,36 +179,6 @@ func (c *cluster) run() {
 	close(ch)
 }
 
-func (c *cluster) put(src, dest string) {
-	fmt.Printf("%s: putting %s %s\n", c.name, src, dest)
-	c.parallel(1, c.total, func(host string, progress func(float64)) ([]byte, error) {
-		session, err := newSSHSession("cockroach", host)
-		if err != nil {
-			return nil, err
-		}
-		defer session.Close()
-		return nil, scp(src, dest, progress, session)
-	})
-}
-
-func (c *cluster) stopLoad() {
-	if c.loadGen == 0 {
-		log.Fatalf("no load generator node specified for cluster: %s", c.name)
-	}
-
-	session, err := newSSHSession("cockroach", c.host(c.loadGen))
-	if err != nil {
-		panic(err)
-	}
-	defer session.Close()
-
-	fmt.Printf("%s: stopping load\n", c.name)
-	const cmd = `sudo pkill -9 kv || true`
-	if _, err := session.CombinedOutput(cmd); err != nil {
-		panic(err)
-	}
-}
-
 const progressDone = "=======================================>"
 const progressTodo = "----------------------------------------"
 
@@ -221,31 +187,34 @@ func formatProgress(p float64) string {
 	return fmt.Sprintf("[%s%s] %.0f%%", progressDone[i:], progressTodo[:i], 100*p)
 }
 
-func (c *cluster) parallel(from, to int, fn func(host string, progress func(float64)) ([]byte, error)) {
+func (c *cluster) put(src, dest string) {
+	fmt.Printf("%s: putting %s %s\n", c.name, src, dest)
+
 	type result struct {
-		host  string
 		index int
-		out   []byte
 		err   error
 	}
 
 	var writer uiWriter
-	results := make(chan result, 1+to-from)
-	lines := make([]string, 1+to-from)
+	results := make(chan result, c.total)
+	lines := make([]string, c.total)
 	var linesMu sync.Mutex
 
 	var wg sync.WaitGroup
-	for i := from; i <= to; i++ {
+	for i := 1; i <= c.total; i++ {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			host := c.host(i)
-			out, err := fn(host, func(p float64) {
-				linesMu.Lock()
-				defer linesMu.Unlock()
-				lines[i-from] = formatProgress(p)
-			})
-			results <- result{host, i, out, err}
+			session, err := newSSHSession("cockroach", c.host(i))
+			if err == nil {
+				defer session.Close()
+				err = scp(src, dest, func(p float64) {
+					linesMu.Lock()
+					defer linesMu.Unlock()
+					lines[i-1] = formatProgress(p)
+				}, session)
+			}
+			results <- result{i, err}
 		}(i)
 	}
 
@@ -270,16 +239,16 @@ func (c *cluster) parallel(from, to int, fn func(host string, progress func(floa
 				linesMu.Lock()
 				if r.err != nil {
 					haveErr = true
-					lines[r.index-from] = r.err.Error()
+					lines[r.index-1] = r.err.Error()
 				} else {
-					lines[r.index-from] = "done"
+					lines[r.index-1] = "done"
 				}
 				linesMu.Unlock()
 			}
 		}
 		linesMu.Lock()
 		for i := range lines {
-			fmt.Fprintf(&writer, "  %2d: ", i+from)
+			fmt.Fprintf(&writer, "  %2d: ", i+1)
 			if lines[i] != "" {
 				fmt.Fprintf(&writer, "%s", lines[i])
 			} else {
@@ -288,6 +257,84 @@ func (c *cluster) parallel(from, to int, fn func(host string, progress func(floa
 			fmt.Fprintf(&writer, "\n")
 		}
 		linesMu.Unlock()
+		writer.Flush(os.Stdout)
+		spinnerIdx++
+	}
+
+	if haveErr {
+		log.Fatal("failed")
+	}
+}
+
+func (c *cluster) stopLoad() {
+	if c.loadGen == 0 {
+		log.Fatalf("no load generator node specified for cluster: %s", c.name)
+	}
+
+	session, err := newSSHSession("cockroach", c.host(c.loadGen))
+	if err != nil {
+		panic(err)
+	}
+	defer session.Close()
+
+	fmt.Printf("%s: stopping load\n", c.name)
+	const cmd = `sudo pkill -9 kv || true`
+	if _, err := session.CombinedOutput(cmd); err != nil {
+		panic(err)
+	}
+}
+
+func (c *cluster) parallel(display string, from, to int, fn func(host string) ([]byte, error)) {
+	type result struct {
+		index int
+		out   []byte
+		err   error
+	}
+
+	results := make(chan result, 1+to-from)
+	var wg sync.WaitGroup
+	for i := from; i <= to; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			out, err := fn(c.host(i))
+			results <- result{i, out, err}
+		}(i)
+	}
+
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	var writer uiWriter
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+	complete := make([]bool, 1+to-from)
+	haveErr := false
+
+	var spinner = []string{"|", "/", "-", "\\"}
+	spinnerIdx := 0
+
+	for done := false; !done; {
+		select {
+		case <-ticker.C:
+		case r, ok := <-results:
+			done = !ok
+			if ok {
+				complete[r.index-from] = true
+			}
+		}
+		fmt.Fprint(&writer, display)
+		for i := range complete {
+			if complete[i] {
+				fmt.Fprintf(&writer, " %d", i+from)
+			}
+		}
+		if !done {
+			fmt.Fprintf(&writer, " %s", spinner[spinnerIdx%len(spinner)])
+		}
+		fmt.Fprintf(&writer, "\n")
 		writer.Flush(os.Stdout)
 		spinnerIdx++
 	}
