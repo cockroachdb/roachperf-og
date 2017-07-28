@@ -9,6 +9,7 @@ import (
 
 var clusterName string
 var clusterNodes = 6
+var secure = false
 
 // clusterSizes contains the total number of nodes in the cluster, including
 // any node used for load generation.
@@ -17,7 +18,12 @@ var clusterSizes = map[string]int{
 }
 
 func newCluster() *cluster {
-	return &cluster{clusterName, clusterNodes, clusterSizes[clusterName]}
+	return &cluster{
+		name:   clusterName,
+		count:  clusterNodes,
+		total:  clusterSizes[clusterName],
+		secure: secure,
+	}
 }
 
 var rootCmd = &cobra.Command{
@@ -90,7 +96,6 @@ var testCmd = &cobra.Command{
 
 func main() {
 	// TODO(peter):
-	// - optional secure mode
 	//
 	// Test
 	// - cluster config + load generator
@@ -130,6 +135,8 @@ func main() {
 		&clusterName, "cluster", "c", clusterName, "cluster name")
 	rootCmd.PersistentFlags().IntVarP(
 		&clusterNodes, "nodes", "n", clusterNodes, "number of nodes in cluster")
+	rootCmd.PersistentFlags().BoolVar(
+		&secure, "secure", false, "use a secure cluster")
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)

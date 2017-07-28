@@ -13,9 +13,10 @@ import (
 )
 
 type cluster struct {
-	name  string
-	count int
-	total int
+	name   string
+	count  int
+	total  int
+	secure bool
 }
 
 func (c *cluster) host(index int) string {
@@ -31,13 +32,16 @@ func (c *cluster) startNode(host, join string) ([]byte, error) {
 
 	const env = "GOGC=200 COCKROACH_ENABLE_RPC_COMPRESSION=false"
 
-	args := []string{
-		"--insecure",
-		"--store=path=/mnt/data1/cockroach",
-		"--log-dir=/home/cockroach/logs",
-		// "--logtostderr",
-		"--background",
+	var args []string
+	if c.secure {
+		args = append(args, "--certs-dir=certs")
+	} else {
+		args = append(args, "--insecure")
 	}
+	args = append(args, "--store=path=/mnt/data1/cockroach")
+	args = append(args, "--log-dir=/home/cockroach/logs")
+	// args = append(args, "--logtostderr")
+	args = append(args, "--background")
 	if join != host {
 		args = append(args, "--join="+join)
 	}
@@ -148,10 +152,17 @@ func (c *cluster) run() {
 
 	session.Stdout = os.Stdout
 	session.Stderr = os.Stderr
-	const url = "'postgres://root@localhost:27183/test?sslmode=disable'"
+	url := "postgres://root@localhost:27183/test"
+	if c.secure {
+		url += "?sslcert=%2Fhome%2Fcockroach%2Fcerts%2Fnode.crt&" +
+			"sslkey=%2Fhome%2Fcockroach%2Fcerts%2Fnode.key&sslmode=verify-full&" +
+			"sslrootcert=%2Fhome%2Fcockroach%2Fcerts%2Fca.crt"
+	} else {
+		url += "?sslmode=disable"
+	}
 	const cmd = "./kv --duration=1m --read-percent=95 --concurrency=10 --splits=10"
 	fmt.Println(cmd)
-	if err := session.Run(cmd + " " + url); err != nil {
+	if err := session.Run(cmd + " '" + url + "'"); err != nil {
 		if !isSigKill(err) {
 			log.Fatal(err)
 		}
