@@ -7,7 +7,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var clusterName string
 var clusterNodes = 6
 var secure = false
 
@@ -30,15 +29,22 @@ var clusterSizes = map[string]clusterInfo{
 	"omega":    {6, 0},
 }
 
-func newCluster() *cluster {
-	info := clusterSizes[clusterName]
+func newCluster(args []string) (*cluster, error) {
+	name := os.Getenv("CLUSTER")
+	if len(args) == 1 {
+		name = args[0]
+	}
+	if name == "" {
+		return nil, fmt.Errorf("no cluster specified")
+	}
+	info := clusterSizes[name]
 	return &cluster{
-		name:    clusterName,
+		name:    name,
 		count:   clusterNodes,
 		total:   info.total,
 		loadGen: info.loadGen,
 		secure:  secure,
-	}
+	}, nil
 }
 
 var rootCmd = &cobra.Command{
@@ -48,59 +54,73 @@ var rootCmd = &cobra.Command{
 roachperf is a tool for manipulating test clusters, allowing easy starting,
 stopping and wiping of clusters along with running load generators.
 `,
-	SilenceUsage: true,
 }
 
 var startCmd = &cobra.Command{
-	Use:   "start",
+	Use:   "start <cluster>",
 	Short: "start a cluster",
 	Long:  ``,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		c := newCluster()
+		c, err := newCluster(args)
+		if err != nil {
+			return err
+		}
 		c.start()
 		return nil
 	},
 }
 
 var stopCmd = &cobra.Command{
-	Use:   "stop",
+	Use:   "stop <cluster>",
 	Short: "stop a cluster",
 	Long:  ``,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		c := newCluster()
+		c, err := newCluster(args)
+		if err != nil {
+			return err
+		}
 		c.stop()
 		return nil
 	},
 }
 
 var wipeCmd = &cobra.Command{
-	Use:   "wipe",
+	Use:   "wipe <cluster>",
 	Short: "wipe a cluster",
 	Long:  ``,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		c := newCluster()
+		c, err := newCluster(args)
+		if err != nil {
+			return err
+		}
 		c.wipe()
 		return nil
 	},
 }
 
 var statusCmd = &cobra.Command{
-	Use:   "status",
+	Use:   "status <cluster>",
 	Short: "retrieve the status of a cluster",
 	Long:  ``,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		c := newCluster()
+		c, err := newCluster(args)
+		if err != nil {
+			return err
+		}
 		c.status()
 		return nil
 	},
 }
 
 var testCmd = &cobra.Command{
-	Use:   "test",
+	Use:   "test <cluster>",
 	Short: "run a test on a cluster",
 	Long:  ``,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		c := newCluster()
+		c, err := newCluster(args)
+		if err != nil {
+			return err
+		}
 		c.wipe()
 		c.start()
 		c.run()
@@ -142,12 +162,6 @@ func main() {
 		testCmd,
 	)
 
-	clusterName = os.Getenv("CLUSTER")
-	if clusterName == "" {
-		clusterName = "denim"
-	}
-	rootCmd.PersistentFlags().StringVarP(
-		&clusterName, "cluster", "c", clusterName, "cluster name")
 	rootCmd.PersistentFlags().IntVarP(
 		&clusterNodes, "nodes", "n", clusterNodes, "number of nodes in cluster")
 	rootCmd.PersistentFlags().BoolVar(
