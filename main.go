@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"path"
 
 	"github.com/spf13/cobra"
 )
@@ -31,7 +32,7 @@ var clusterSizes = map[string]clusterInfo{
 
 func newCluster(args []string) (*cluster, error) {
 	name := os.Getenv("CLUSTER")
-	if len(args) == 1 {
+	if len(args) >= 1 {
 		name = args[0]
 	}
 	if name == "" {
@@ -129,6 +130,31 @@ var testCmd = &cobra.Command{
 	},
 }
 
+var putCmd = &cobra.Command{
+	Use:   "put <cluster> <src> [<dest>]",
+	Short: "copy a local file to the nodes in a cluster",
+	Long:  ``,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if len(args) < 2 {
+			return fmt.Errorf("source file not specified")
+		}
+		if len(args) > 3 {
+			return fmt.Errorf("too many arguments")
+		}
+		src := args[1]
+		dest := path.Base(src)
+		if len(args) == 3 {
+			dest = args[2]
+		}
+		c, err := newCluster(args)
+		if err != nil {
+			return err
+		}
+		c.put(src, dest)
+		return nil
+	},
+}
+
 func main() {
 	// TODO(peter):
 	//
@@ -160,6 +186,7 @@ func main() {
 		wipeCmd,
 		statusCmd,
 		testCmd,
+		putCmd,
 	)
 
 	rootCmd.PersistentFlags().IntVarP(

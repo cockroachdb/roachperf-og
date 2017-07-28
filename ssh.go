@@ -2,9 +2,11 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"os"
+	"path"
 	"path/filepath"
 	"sync"
 	"time"
@@ -99,4 +101,28 @@ func isSigKill(err error) bool {
 		return t.Signal() == string(ssh.SIGKILL)
 	}
 	return false
+}
+
+func scp(src, dest string, session *ssh.Session) error {
+	f, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	s, err := f.Stat()
+	if err != nil {
+		return err
+	}
+	go func() {
+		w, _ := session.StdinPipe()
+		defer w.Close()
+		fmt.Fprintf(w, "C%#o %d %s\n", s.Mode().Perm(), s.Size(), path.Base(src))
+		io.Copy(w, f)
+		fmt.Fprint(w, "\x00")
+	}()
+	cmd := fmt.Sprintf("rm -f %s ; scp -t %s", dest, dest)
+	if err := session.Run(cmd); err != nil {
+		return err
+	}
+	return nil
 }

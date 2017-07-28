@@ -179,6 +179,19 @@ func (c *cluster) run() {
 	close(ch)
 }
 
+func (c *cluster) put(src, dest string) {
+	fmt.Printf("%s: putting %s %s", c.name, src, dest)
+	c.parallel(1, c.total, func(host string) ([]byte, error) {
+		session, err := newSSHSession("cockroach", host)
+		if err != nil {
+			return nil, err
+		}
+		defer session.Close()
+		return nil, scp(src, dest, session)
+	})
+	fmt.Printf("\n")
+}
+
 func (c *cluster) stopLoad() {
 	if c.loadGen == 0 {
 		log.Fatalf("no load generator node specified for cluster: %s", c.name)
@@ -225,13 +238,13 @@ func (c *cluster) parallel(from, to int, fn func(host string) ([]byte, error)) {
 	haveErr := false
 	for r := range results {
 		if r.err != nil {
-			fmt.Printf("\n%s: %s\n", r.host, r.err)
+			// fmt.Printf("\n%s: %s\n", r.host, r.err)
 			haveErr = true
 		} else {
-			fmt.Printf(" %d", r.index)
+			// fmt.Printf(" %d", r.index)
 		}
 	}
 	if haveErr {
-		panic("failed\n")
+		log.Fatal("failed")
 	}
 }
