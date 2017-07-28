@@ -13,10 +13,11 @@ import (
 )
 
 type cluster struct {
-	name   string
-	count  int
-	total  int
-	secure bool
+	name    string
+	count   int
+	total   int
+	loadGen int
+	secure  bool
 }
 
 func (c *cluster) host(index int) string {
@@ -93,7 +94,9 @@ sudo find /home/cockroach/logs -type f -not -name supervisor.log -exec rm -f {} 
 }
 
 func (c *cluster) wipe() {
-	c.stopLoad()
+	if c.loadGen != 0 {
+		c.stopLoad()
+	}
 	fmt.Printf("%s: wiping", c.name)
 	c.parallel(1, c.total, c.wipeNode)
 	fmt.Printf("\n")
@@ -112,7 +115,7 @@ func (c *cluster) status() {
 			defer session.Close()
 
 			proc := "cockroach"
-			if i+1 == c.total {
+			if i+1 == c.loadGen {
 				proc = "kv"
 			}
 			out, err := session.CombinedOutput("pidof " + proc)
@@ -130,12 +133,16 @@ func (c *cluster) status() {
 
 	for i, r := range results {
 		s := <-r
-		fmt.Printf("%s %d: %s\n", c.name, i+1, s)
+		fmt.Printf("%s %2d: %s\n", c.name, i+1, s)
 	}
 }
 
 func (c *cluster) run() {
-	session, err := newSSHSession("cockroach", c.host(c.total))
+	if c.loadGen == 0 {
+		log.Fatalf("no load generator node specified for cluster: %s", c.name)
+	}
+
+	session, err := newSSHSession("cockroach", c.host(c.loadGen))
 	if err != nil {
 		panic(err)
 	}
@@ -173,7 +180,11 @@ func (c *cluster) run() {
 }
 
 func (c *cluster) stopLoad() {
-	session, err := newSSHSession("cockroach", c.host(c.total))
+	if c.loadGen == 0 {
+		log.Fatalf("no load generator node specified for cluster: %s", c.name)
+	}
+
+	session, err := newSSHSession("cockroach", c.host(c.loadGen))
 	if err != nil {
 		panic(err)
 	}

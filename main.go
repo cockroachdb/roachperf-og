@@ -11,18 +11,33 @@ var clusterName string
 var clusterNodes = 6
 var secure = false
 
-// clusterSizes contains the total number of nodes in the cluster, including
-// any node used for load generation.
-var clusterSizes = map[string]int{
-	"denim": 7,
+type clusterInfo struct {
+	total   int
+	loadGen int
+}
+
+var clusterSizes = map[string]clusterInfo{
+	"adriatic": {6, 0},
+	"blue":     {10, 0},
+	"catrina":  {3, 0},
+	"cerulean": {4, 0},
+	"cobalt":   {6, 0},
+	"cyan":     {6, 0},
+	"denim":    {7, 7},
+	"indigo":   {9, 0},
+	"lapis":    {4, 0},
+	"navy":     {6, 0},
+	"omega":    {6, 0},
 }
 
 func newCluster() *cluster {
+	info := clusterSizes[clusterName]
 	return &cluster{
-		name:   clusterName,
-		count:  clusterNodes,
-		total:  clusterSizes[clusterName],
-		secure: secure,
+		name:    clusterName,
+		count:   clusterNodes,
+		total:   info.total,
+		loadGen: info.loadGen,
+		secure:  secure,
 	}
 }
 
