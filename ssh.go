@@ -103,7 +103,23 @@ func isSigKill(err error) bool {
 	return false
 }
 
-func scp(src, dest string, session *ssh.Session) error {
+type progressWriter struct {
+	writer   io.Writer
+	done     int64
+	total    int64
+	progress func(float64)
+}
+
+func (p *progressWriter) Write(b []byte) (int, error) {
+	n, err := p.writer.Write(b)
+	if err == nil {
+		p.done += int64(n)
+		p.progress(float64(p.done) / float64(p.total))
+	}
+	return n, err
+}
+
+func scp(src, dest string, progress func(float64), session *ssh.Session) error {
 	f, err := os.Open(src)
 	if err != nil {
 		return err
@@ -117,7 +133,8 @@ func scp(src, dest string, session *ssh.Session) error {
 		w, _ := session.StdinPipe()
 		defer w.Close()
 		fmt.Fprintf(w, "C%#o %d %s\n", s.Mode().Perm(), s.Size(), path.Base(src))
-		io.Copy(w, f)
+		p := &progressWriter{w, 0, s.Size(), progress}
+		io.Copy(p, f)
 		fmt.Fprint(w, "\x00")
 	}()
 	cmd := fmt.Sprintf("rm -f %s ; scp -t %s", dest, dest)

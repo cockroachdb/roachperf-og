@@ -3,14 +3,13 @@ package main
 import (
 	"fmt"
 	"log"
+	"math"
 	"os"
 	"os/signal"
 	"strings"
 	"sync"
 	"syscall"
 	"time"
-
-	"github.com/gosuri/uilive"
 
 	"golang.org/x/crypto/ssh"
 )
@@ -57,7 +56,7 @@ func (c *cluster) startNode(host, join string) ([]byte, error) {
 func (c *cluster) start() {
 	fmt.Printf("%s: starting\n", c.name)
 	host1 := c.host(1)
-	c.parallel(1, c.count, func(host string) ([]byte, error) {
+	c.parallel(1, c.count, func(host string, _ func(float64)) ([]byte, error) {
 		return c.startNode(host, host1)
 	})
 }
@@ -75,7 +74,9 @@ func (c *cluster) stopNode(host string) ([]byte, error) {
 
 func (c *cluster) stop() {
 	fmt.Printf("%s: stopping\n", c.name)
-	c.parallel(1, c.total, c.stopNode)
+	c.parallel(1, c.total, func(host string, _ func(float64)) ([]byte, error) {
+		return c.stopNode(host)
+	})
 }
 
 func (c *cluster) wipeNode(host string) ([]byte, error) {
@@ -99,7 +100,9 @@ func (c *cluster) wipe() {
 		c.stopLoad()
 	}
 	fmt.Printf("%s: wiping\n", c.name)
-	c.parallel(1, c.total, c.wipeNode)
+	c.parallel(1, c.total, func(host string, _ func(float64)) ([]byte, error) {
+		return c.wipeNode(host)
+	})
 }
 
 func (c *cluster) status() {
@@ -182,13 +185,13 @@ func (c *cluster) run() {
 
 func (c *cluster) put(src, dest string) {
 	fmt.Printf("%s: putting %s %s\n", c.name, src, dest)
-	c.parallel(1, c.total, func(host string) ([]byte, error) {
+	c.parallel(1, c.total, func(host string, progress func(float64)) ([]byte, error) {
 		session, err := newSSHSession("cockroach", host)
 		if err != nil {
 			return nil, err
 		}
 		defer session.Close()
-		return nil, scp(src, dest, session)
+		return nil, scp(src, dest, progress, session)
 	})
 }
 
@@ -210,7 +213,15 @@ func (c *cluster) stopLoad() {
 	}
 }
 
-func (c *cluster) parallel(from, to int, fn func(host string) ([]byte, error)) {
+const progressDone = "=======================================>"
+const progressTodo = "----------------------------------------"
+
+func formatProgress(p float64) string {
+	i := int(math.Ceil(float64(len(progressDone)) * (1 - p)))
+	return fmt.Sprintf("[%s%s] %.0f%%", progressDone[i:], progressTodo[:i], 100*p)
+}
+
+func (c *cluster) parallel(from, to int, fn func(host string, progress func(float64)) ([]byte, error)) {
 	type result struct {
 		host  string
 		index int
@@ -218,16 +229,22 @@ func (c *cluster) parallel(from, to int, fn func(host string) ([]byte, error)) {
 		err   error
 	}
 
-	writer := uilive.New()
-
+	var writer uiWriter
 	results := make(chan result, 1+to-from)
+	lines := make([]string, 1+to-from)
+	var linesMu sync.Mutex
+
 	var wg sync.WaitGroup
 	for i := from; i <= to; i++ {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
 			host := c.host(i)
-			out, err := fn(host)
+			out, err := fn(host, func(p float64) {
+				linesMu.Lock()
+				defer linesMu.Unlock()
+				lines[i-from] = formatProgress(p)
+			})
 			results <- result{host, i, out, err}
 		}(i)
 	}
@@ -240,7 +257,9 @@ func (c *cluster) parallel(from, to int, fn func(host string) ([]byte, error)) {
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 	haveErr := false
-	lines := make([]string, 1+to-from)
+
+	var spinner = []string{"|", "/", "-", "\\"}
+	spinnerIdx := 0
 
 	for done := false; !done; {
 		select {
@@ -248,22 +267,29 @@ func (c *cluster) parallel(from, to int, fn func(host string) ([]byte, error)) {
 		case r, ok := <-results:
 			done = !ok
 			if ok {
+				linesMu.Lock()
 				if r.err != nil {
 					haveErr = true
 					lines[r.index-from] = r.err.Error()
 				} else {
 					lines[r.index-from] = "done"
 				}
+				linesMu.Unlock()
 			}
 		}
+		linesMu.Lock()
 		for i := range lines {
+			fmt.Fprintf(&writer, "  %2d: ", i+from)
 			if lines[i] != "" {
-				fmt.Fprintf(writer, "  %2d: ", i+from)
-				fmt.Fprintf(writer, "%s", lines[i])
-				fmt.Fprintf(writer, "\n")
+				fmt.Fprintf(&writer, "%s", lines[i])
+			} else {
+				fmt.Fprintf(&writer, "%s", spinner[spinnerIdx%len(spinner)])
 			}
+			fmt.Fprintf(&writer, "\n")
 		}
-		writer.Flush()
+		linesMu.Unlock()
+		writer.Flush(os.Stdout)
+		spinnerIdx++
 	}
 
 	if haveErr {
