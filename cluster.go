@@ -8,6 +8,9 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"time"
+
+	"github.com/gosuri/uilive"
 
 	"golang.org/x/crypto/ssh"
 )
@@ -52,12 +55,11 @@ func (c *cluster) startNode(host, join string) ([]byte, error) {
 }
 
 func (c *cluster) start() {
-	fmt.Printf("%s: starting", c.name)
+	fmt.Printf("%s: starting\n", c.name)
 	host1 := c.host(1)
 	c.parallel(1, c.count, func(host string) ([]byte, error) {
 		return c.startNode(host, host1)
 	})
-	fmt.Printf("\n")
 }
 
 func (c *cluster) stopNode(host string) ([]byte, error) {
@@ -72,9 +74,8 @@ func (c *cluster) stopNode(host string) ([]byte, error) {
 }
 
 func (c *cluster) stop() {
-	fmt.Printf("%s: stopping", c.name)
+	fmt.Printf("%s: stopping\n", c.name)
 	c.parallel(1, c.total, c.stopNode)
-	fmt.Printf("\n")
 }
 
 func (c *cluster) wipeNode(host string) ([]byte, error) {
@@ -97,12 +98,12 @@ func (c *cluster) wipe() {
 	if c.loadGen != 0 {
 		c.stopLoad()
 	}
-	fmt.Printf("%s: wiping", c.name)
+	fmt.Printf("%s: wiping\n", c.name)
 	c.parallel(1, c.total, c.wipeNode)
-	fmt.Printf("\n")
 }
 
 func (c *cluster) status() {
+	fmt.Printf("%s: status\n", c.name)
 	results := make([]chan string, c.total)
 	for i := 0; i < c.total; i++ {
 		results[i] = make(chan string, 1)
@@ -133,7 +134,7 @@ func (c *cluster) status() {
 
 	for i, r := range results {
 		s := <-r
-		fmt.Printf("%s %2d: %s\n", c.name, i+1, s)
+		fmt.Printf("  %2d: %s\n", i+1, s)
 	}
 }
 
@@ -180,7 +181,7 @@ func (c *cluster) run() {
 }
 
 func (c *cluster) put(src, dest string) {
-	fmt.Printf("%s: putting %s %s", c.name, src, dest)
+	fmt.Printf("%s: putting %s %s\n", c.name, src, dest)
 	c.parallel(1, c.total, func(host string) ([]byte, error) {
 		session, err := newSSHSession("cockroach", host)
 		if err != nil {
@@ -189,7 +190,6 @@ func (c *cluster) put(src, dest string) {
 		defer session.Close()
 		return nil, scp(src, dest, session)
 	})
-	fmt.Printf("\n")
 }
 
 func (c *cluster) stopLoad() {
@@ -218,6 +218,8 @@ func (c *cluster) parallel(from, to int, fn func(host string) ([]byte, error)) {
 		err   error
 	}
 
+	writer := uilive.New()
+
 	results := make(chan result, 1+to-from)
 	var wg sync.WaitGroup
 	for i := from; i <= to; i++ {
@@ -235,15 +237,35 @@ func (c *cluster) parallel(from, to int, fn func(host string) ([]byte, error)) {
 		close(results)
 	}()
 
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
 	haveErr := false
-	for r := range results {
-		if r.err != nil {
-			// fmt.Printf("\n%s: %s\n", r.host, r.err)
-			haveErr = true
-		} else {
-			// fmt.Printf(" %d", r.index)
+	lines := make([]string, 1+to-from)
+
+	for done := false; !done; {
+		select {
+		case <-ticker.C:
+		case r, ok := <-results:
+			done = !ok
+			if ok {
+				if r.err != nil {
+					haveErr = true
+					lines[r.index-from] = r.err.Error()
+				} else {
+					lines[r.index-from] = "done"
+				}
+			}
 		}
+		for i := range lines {
+			if lines[i] != "" {
+				fmt.Fprintf(writer, "  %2d: ", i+from)
+				fmt.Fprintf(writer, "%s", lines[i])
+				fmt.Fprintf(writer, "\n")
+			}
+		}
+		writer.Flush()
 	}
+
 	if haveErr {
 		log.Fatal("failed")
 	}
