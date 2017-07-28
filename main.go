@@ -7,6 +7,19 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var clusterName string
+var clusterNodes = 6
+
+// clusterSizes contains the total number of nodes in the cluster, including
+// any node used for load generation.
+var clusterSizes = map[string]int{
+	"denim": 7,
+}
+
+func newCluster() *cluster {
+	return &cluster{clusterName, clusterNodes, clusterSizes[clusterName]}
+}
+
 var rootCmd = &cobra.Command{
 	Use:   "roachperf [command] (flags)",
 	Short: "roachperf tool for manipulating test clusters",
@@ -22,7 +35,7 @@ var startCmd = &cobra.Command{
 	Short: "start a cluster",
 	Long:  ``,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		c := &cluster{"denim", 6}
+		c := newCluster()
 		c.start()
 		return nil
 	},
@@ -33,7 +46,7 @@ var stopCmd = &cobra.Command{
 	Short: "stop a cluster",
 	Long:  ``,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		c := &cluster{"denim", 6}
+		c := newCluster()
 		c.stop()
 		return nil
 	},
@@ -44,7 +57,7 @@ var wipeCmd = &cobra.Command{
 	Short: "wipe a cluster",
 	Long:  ``,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		c := &cluster{"denim", 6}
+		c := newCluster()
 		c.wipe()
 		return nil
 	},
@@ -55,7 +68,7 @@ var statusCmd = &cobra.Command{
 	Short: "retrieve the status of a cluster",
 	Long:  ``,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		c := &cluster{"denim", 6}
+		c := newCluster()
 		c.status()
 		return nil
 	},
@@ -66,7 +79,7 @@ var testCmd = &cobra.Command{
 	Short: "run a test on a cluster",
 	Long:  ``,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		c := &cluster{"denim", 6}
+		c := newCluster()
 		c.wipe()
 		c.start()
 		c.run()
@@ -108,6 +121,16 @@ func main() {
 		statusCmd,
 		testCmd,
 	)
+
+	clusterName = os.Getenv("CLUSTER")
+	if clusterName == "" {
+		clusterName = "denim"
+	}
+	rootCmd.PersistentFlags().StringVarP(
+		&clusterName, "cluster", "c", clusterName, "cluster name")
+	rootCmd.PersistentFlags().IntVarP(
+		&clusterNodes, "nodes", "n", clusterNodes, "number of nodes in cluster")
+
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
 		os.Exit(1)

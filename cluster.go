@@ -15,6 +15,7 @@ import (
 type cluster struct {
 	name  string
 	count int
+	total int
 }
 
 func (c *cluster) host(index int) string {
@@ -67,7 +68,7 @@ func (c *cluster) stopNode(host string) ([]byte, error) {
 
 func (c *cluster) stop() {
 	fmt.Printf("%s: stopping", c.name)
-	c.parallel(1, c.count+1, c.stopNode)
+	c.parallel(1, c.total, c.stopNode)
 	fmt.Printf("\n")
 }
 
@@ -90,13 +91,13 @@ sudo find /home/cockroach/logs -type f -not -name supervisor.log -exec rm -f {} 
 func (c *cluster) wipe() {
 	c.stopLoad()
 	fmt.Printf("%s: wiping", c.name)
-	c.parallel(1, c.count+1, c.wipeNode)
+	c.parallel(1, c.total, c.wipeNode)
 	fmt.Printf("\n")
 }
 
 func (c *cluster) status() {
-	results := make([]chan string, c.count+1)
-	for i := 0; i <= c.count; i++ {
+	results := make([]chan string, c.total)
+	for i := 0; i < c.total; i++ {
 		results[i] = make(chan string, 1)
 		go func(i int) {
 			session, err := newSSHSession("cockroach", c.host(i+1))
@@ -107,7 +108,7 @@ func (c *cluster) status() {
 			defer session.Close()
 
 			proc := "cockroach"
-			if i >= c.count {
+			if i+1 == c.total {
 				proc = "kv"
 			}
 			out, err := session.CombinedOutput("pidof " + proc)
@@ -130,7 +131,7 @@ func (c *cluster) status() {
 }
 
 func (c *cluster) run() {
-	session, err := newSSHSession("cockroach", c.host(7))
+	session, err := newSSHSession("cockroach", c.host(c.total))
 	if err != nil {
 		panic(err)
 	}
@@ -161,7 +162,7 @@ func (c *cluster) run() {
 }
 
 func (c *cluster) stopLoad() {
-	session, err := newSSHSession("cockroach", c.host(7))
+	session, err := newSSHSession("cockroach", c.host(c.total))
 	if err != nil {
 		panic(err)
 	}
