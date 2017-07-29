@@ -66,7 +66,10 @@ func (c *cluster) stopNode(host string) ([]byte, error) {
 	}
 	defer session.Close()
 
-	const cmd = `sudo pkill -9 "cockroach|java|mongo|kv" || true`
+	const cmd = `
+sudo pkill -9 "cockroach|java|mongo" || true ;
+sudo kill -9 $(lsof -t -i :26257 -i :27183) 2>/dev/null || true ;
+`
 	return session.CombinedOutput(cmd)
 }
 
@@ -83,7 +86,8 @@ func (c *cluster) wipeNode(host string) ([]byte, error) {
 	defer session.Close()
 
 	const cmd = `
-sudo pkill -9 "cockroach|java|mongo|kv" || true ;
+sudo pkill -9 "cockroach|java|mongo" || true ;
+sudo kill -9 $(lsof -t -i :26257 -i :27183) 2>/dev/null || true ;
 sudo find /mnt/data* -maxdepth 1 -type f -exec rm -f {} \; ;
 sudo rm -fr /mnt/data*/{auxiliary,local,tmp,cassandra,cockroach,mongo-data} \; ;
 sudo find /home/cockroach/logs -type f -not -name supervisor.log -exec rm -f {} \; ;
@@ -275,7 +279,7 @@ func (c *cluster) stopLoad() {
 		}
 		defer session.Close()
 
-		const cmd = `sudo pkill -9 kv || true`
+		const cmd = `sudo kill -9 $(lsof -t -i :27183) 2>/dev/null || true`
 		return session.CombinedOutput(cmd)
 	})
 }
