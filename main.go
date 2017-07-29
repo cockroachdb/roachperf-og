@@ -10,6 +10,7 @@ import (
 
 var clusterNodes = 6
 var secure = false
+var env = "COCKROACH_ENABLE_RPC_COMPRESSION=false"
 
 type clusterInfo struct {
 	total   int
@@ -45,6 +46,7 @@ func newCluster(args []string) (*cluster, error) {
 		total:   info.total,
 		loadGen: info.loadGen,
 		secure:  secure,
+		env:     env,
 	}, nil
 }
 
@@ -193,6 +195,8 @@ func main() {
 		&clusterNodes, "nodes", "n", clusterNodes, "number of nodes in cluster")
 	rootCmd.PersistentFlags().BoolVar(
 		&secure, "secure", false, "use a secure cluster")
+	rootCmd.PersistentFlags().StringVarP(
+		&env, "env", "e", env, "cockroach node environment variables")
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)

@@ -18,6 +18,7 @@ type cluster struct {
 	total   int
 	loadGen int
 	secure  bool
+	env     string
 }
 
 func (c *cluster) host(index int) string {
@@ -31,8 +32,6 @@ func (c *cluster) startNode(host, join string) ([]byte, error) {
 	}
 	defer session.Close()
 
-	const env = "GOGC=200 COCKROACH_ENABLE_RPC_COMPRESSION=false"
-
 	var args []string
 	if c.secure {
 		args = append(args, "--certs-dir=certs")
@@ -40,13 +39,13 @@ func (c *cluster) startNode(host, join string) ([]byte, error) {
 		args = append(args, "--insecure")
 	}
 	args = append(args, "--store=path=/mnt/data1/cockroach")
-	args = append(args, "--log-dir=/home/cockroach/logs")
-	// args = append(args, "--logtostderr")
+	// args = append(args, "--log-dir=/home/cockroach/logs")
+	args = append(args, "--logtostderr")
 	args = append(args, "--background")
 	if join != host {
 		args = append(args, "--join="+join)
 	}
-	cmd := env + " ./cockroach start " + strings.Join(args, " ") +
+	cmd := c.env + " ./cockroach start " + strings.Join(args, " ") +
 		"> logs/cockroach.stdout 2> logs/cockroach.stderr"
 	return session.CombinedOutput(cmd)
 }
