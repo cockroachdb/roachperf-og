@@ -10,8 +10,6 @@ import (
 	"sync"
 	"syscall"
 	"time"
-
-	"golang.org/x/crypto/ssh"
 )
 
 type cluster struct {
@@ -94,9 +92,6 @@ sudo find /home/cockroach/logs -type f -not -name supervisor.log -exec rm -f {} 
 }
 
 func (c *cluster) wipe() {
-	if c.loadGen != 0 {
-		c.stopLoad()
-	}
 	display := fmt.Sprintf("%s: wiping", c.name)
 	c.parallel(display, 1, c.total, c.wipeNode)
 }
@@ -114,20 +109,21 @@ func (c *cluster) status() {
 			}
 			defer session.Close()
 
-			proc := "cockroach"
-			if i+1 == c.loadGen {
-				proc = "kv"
-			}
-			out, err := session.CombinedOutput("pidof " + proc)
+			cmd := "lsof -i :26257 -i :27183 | awk '!/COMMAND/ {print $1, $2}' | sort | uniq"
+			out, err := session.CombinedOutput(cmd)
+			var msg string
 			if err != nil {
-				if exit, ok := err.(*ssh.ExitError); ok && exit.Signal() == "" {
-					results[i] <- proc + " not running"
-				} else {
-					results[i] <- err.Error()
-				}
+				msg = err.Error()
 			} else {
-				results[i] <- proc + " running " + strings.TrimSpace(string(out))
+				msg = strings.TrimSpace(string(out))
+				if msg == "" {
+					msg = "cockroach not running"
+					if i+1 == c.loadGen {
+						msg = "not running"
+					}
+				}
 			}
+			results[i] <- msg
 		}(i)
 	}
 
@@ -167,7 +163,7 @@ func (c *cluster) run() {
 	} else {
 		url += "?sslmode=disable"
 	}
-	const cmd = "./kv --duration=1m --read-percent=95 --concurrency=10 --splits=10"
+	const cmd = "./kv --duration=1h --read-percent=95 --concurrency=10 --splits=10"
 	fmt.Println(cmd)
 	if err := session.Run(cmd + " '" + url + "'"); err != nil {
 		if !isSigKill(err) {
@@ -271,17 +267,17 @@ func (c *cluster) stopLoad() {
 		log.Fatalf("no load generator node specified for cluster: %s", c.name)
 	}
 
-	session, err := newSSHSession("cockroach", c.host(c.loadGen))
-	if err != nil {
-		panic(err)
-	}
-	defer session.Close()
+	display := fmt.Sprintf("%s: stopping load", c.name)
+	c.parallel(display, c.loadGen, c.loadGen, func(host string) ([]byte, error) {
+		session, err := newSSHSession("cockroach", c.host(c.loadGen))
+		if err != nil {
+			return nil, err
+		}
+		defer session.Close()
 
-	fmt.Printf("%s: stopping load\n", c.name)
-	const cmd = `sudo pkill -9 kv || true`
-	if _, err := session.CombinedOutput(cmd); err != nil {
-		panic(err)
-	}
+		const cmd = `sudo pkill -9 kv || true`
+		return session.CombinedOutput(cmd)
+	})
 }
 
 func (c *cluster) parallel(display string, from, to int, fn func(host string) ([]byte, error)) {
