@@ -75,7 +75,7 @@ func kv95(clusterName string) {
 			baseCmd := fmt.Sprintf("./kv --duration=%s --read-percent=95 --splits=1000", duration)
 			c.runLoad(fmt.Sprintf("%s --concurrency=%d", baseCmd, concurrency),
 				io.MultiWriter(f, os.Stdout), io.MultiWriter(f, os.Stderr))
-			c.stop()
 		}()
 	}
+	c.stop()
 }
