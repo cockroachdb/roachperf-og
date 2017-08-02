@@ -16,6 +16,7 @@ var duration time.Duration
 
 var tests = map[string]func(clusterName string){
 	"kv_95": kv95,
+	"kv_0":  kv0,
 }
 
 func registerTest(name string, fn func(clusterName string)) {
@@ -116,6 +117,39 @@ func kv95(clusterName string) {
 			duration),
 	}
 	dir := testDir("kv_95", m.Bin)
+	fmt.Printf("%s: %s\n", c.name, dir)
+	saveJSON(filepath.Join(dir, "metadata"), m)
+
+	for i := 1; i <= 64; i++ {
+		func() {
+			concurrency := i * c.count
+			f, err := os.Create(fmt.Sprintf("%s/%d", dir, concurrency))
+			if err != nil {
+				log.Fatal(err)
+			}
+			defer f.Close()
+			c.wipe()
+			c.start()
+			cmd := fmt.Sprintf(m.Test, concurrency)
+			stdout := io.MultiWriter(f, os.Stdout)
+			stderr := io.MultiWriter(f, os.Stderr)
+			c.runLoad(cmd, stdout, stderr)
+		}()
+	}
+	c.stop()
+}
+
+func kv0(clusterName string) {
+	c := testCluster(clusterName)
+	m := testMetadata{
+		Bin:   cockroachVersion(c),
+		Nodes: c.count,
+		Env:   c.env,
+		Test: fmt.Sprintf(
+			"./kv --duration=%s --read-percent=0 --splits=1000 --concurrency=%%d",
+			duration),
+	}
+	dir := testDir("kv_0", m.Bin)
 	fmt.Printf("%s: %s\n", c.name, dir)
 	saveJSON(filepath.Join(dir, "metadata"), m)
 
