@@ -154,12 +154,32 @@ var testCmd = &cobra.Command{
 	},
 }
 
-var analyzeCmd = &cobra.Command{
-	Use:   "analyze <testdir> [<testdir>...]",
-	Short: "analyze test output",
+var visualizeCmd = &cobra.Command{
+	Use:   "visualize <testdir> [<testdir>...]",
+	Short: "visualize test output",
 	Long:  ``,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return analyze(args)
+		return visualize(args)
+	},
+}
+
+var dumpCmd = &cobra.Command{
+	Use:   "dump <testdir>",
+	Short: "dump test output",
+	Long:  ``,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if len(args) != 1 {
+			return fmt.Errorf("no test directory specified")
+		}
+		d, err := loadTestData(args[0])
+		if err != nil {
+			return err
+		}
+		for _, r := range d.runs {
+			fmt.Printf("  %3d %8.1f %5.1f %5.1f %5.1f %5.1f\n", r.concurrency,
+				r.opsSec, r.avgLat, r.p50Lat, r.p95Lat, r.p99Lat)
+		}
+		return nil
 	},
 }
 
@@ -219,7 +239,8 @@ func main() {
 		wipeCmd,
 		statusCmd,
 		testCmd,
-		analyzeCmd,
+		visualizeCmd,
+		dumpCmd,
 		putCmd,
 	)
 
