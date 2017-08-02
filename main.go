@@ -143,9 +143,24 @@ var testCmd = &cobra.Command{
 			return fmt.Errorf("unknown cluster: %s", clusterName)
 		}
 		if len(args) != 1 {
-			return fmt.Errorf("no test specified")
+			fmt.Printf("no test specified\n\n")
+			return cmd.Help()
+		}
+		if !isTest(args[0]) {
+			fmt.Printf("unknown test: %s\n\n", args[0])
+			return cmd.Help()
 		}
 		return runTest(args[0], clusterName)
+	},
+}
+
+var analyzeCmd = &cobra.Command{
+	Use:   "analyze <testdir> [<testdir>...]",
+	Short: "analyze test output",
+	Long:  ``,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		fmt.Println(args)
+		return nil
 	},
 }
 
@@ -205,6 +220,7 @@ func main() {
 		wipeCmd,
 		statusCmd,
 		testCmd,
+		analyzeCmd,
 		putCmd,
 	)
 
@@ -215,8 +231,8 @@ func main() {
 	rootCmd.PersistentFlags().StringVarP(
 		&env, "env", "e", env, "cockroach node environment variables")
 
-	testCmd.PersistentFlags().DurationVar(
-		&duration, "duration", 5*time.Minute, "The duration to run each test")
+	testCmd.PersistentFlags().DurationVarP(
+		&duration, "duration", "d", 5*time.Minute, "The duration to run each test")
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)

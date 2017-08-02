@@ -25,6 +25,11 @@ func registerTest(name string, fn func(clusterName string)) {
 	tests[name] = fn
 }
 
+func isTest(name string) bool {
+	_, ok := tests[name]
+	return ok
+}
+
 func runTest(name, clusterName string) error {
 	fn := tests[name]
 	if fn == nil {
