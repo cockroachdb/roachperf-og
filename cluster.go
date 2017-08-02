@@ -174,19 +174,23 @@ func (c *cluster) cockroachVersions() map[string]int {
 	return sha
 }
 
-func (c *cluster) runLoad(cmd string, stdout, stderr io.Writer) {
+func (c *cluster) runLoad(cmd string, stdout, stderr io.Writer) error {
 	if c.loadGen == 0 {
 		log.Fatalf("%s: no load generator node specified", c.name)
 	}
 
 	session, err := newSSHSession("cockroach", c.host(c.loadGen))
 	if err != nil {
-		panic(err)
+		return err
 	}
 	defer session.Close()
 
 	ch := make(chan os.Signal, 1)
 	signal.Notify(ch, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+	defer func() {
+		signal.Stop(ch)
+		close(ch)
+	}()
 	go func() {
 		_, ok := <-ch
 		if ok {
@@ -205,14 +209,7 @@ func (c *cluster) runLoad(cmd string, stdout, stderr io.Writer) {
 		url += "?sslmode=disable"
 	}
 	fmt.Println(cmd)
-	if err := session.Run(cmd + " '" + url + "'"); err != nil {
-		if !isSigKill(err) {
-			log.Fatal(err)
-		}
-	}
-
-	signal.Stop(ch)
-	close(ch)
+	return session.Run(cmd + " '" + url + "'")
 }
 
 const progressDone = "=======================================>"

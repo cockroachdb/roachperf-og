@@ -8,35 +8,43 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"time"
 )
 
 var duration time.Duration
 
-var tests = map[string]func(clusterName string){
-	"kv_95": kv95,
+var tests = map[string]func(clusterName, dir string){
 	"kv_0":  kv0,
+	"kv_95": kv95,
 }
 
-func registerTest(name string, fn func(clusterName string)) {
-	if _, ok := tests[name]; ok {
-		log.Fatalf("%s is an already registered test name", name)
+var dirRE = regexp.MustCompile(`^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}_[0-9]{2}_[0-9]{2}\.([^.]+)\.`)
+
+func findTest(name string) (_ func(clusterName, dir string), dir string) {
+	fn := tests[name]
+	if fn != nil {
+		return fn, ""
 	}
-	tests[name] = fn
+	m := dirRE.FindStringSubmatch(name)
+	if len(m) != 2 {
+		return nil, ""
+	}
+	return tests[m[1]], name
 }
 
 func isTest(name string) bool {
-	_, ok := tests[name]
-	return ok
+	fn, _ := findTest(name)
+	return fn != nil
 }
 
 func runTest(name, clusterName string) error {
-	fn := tests[name]
+	fn, dir := findTest(name)
 	if fn == nil {
 		return fmt.Errorf("unknown test: %s", name)
 	}
-	fn(clusterName)
+	fn(clusterName, dir)
 	return nil
 }
 
@@ -106,24 +114,43 @@ func saveJSON(path string, v interface{}) {
 	}
 }
 
-func kv95(clusterName string) {
+func kvTest(clusterName, testName, dir, cmd string) {
 	c := testCluster(clusterName)
 	m := testMetadata{
 		Bin:   cockroachVersion(c),
 		Nodes: c.count,
 		Env:   c.env,
-		Test: fmt.Sprintf(
-			"./kv --duration=%s --read-percent=95 --splits=1000 --concurrency=%%d",
-			duration),
+		Test:  fmt.Sprintf("%s --duration=%s --concurrency=%%d", cmd, duration),
 	}
-	dir := testDir("kv_95", m.Bin)
+	if dir == "" {
+		dir = testDir(testName, m.Bin)
+		saveJSON(filepath.Join(dir, "metadata"), m)
+	} else {
+		existing := &testMetadata{}
+		if err := loadJSON(filepath.Join(dir, "metadata"), existing); err != nil {
+			log.Fatal(err)
+		}
+		if m.Bin != existing.Bin {
+			log.Fatalf("cockroach binary changed: %s != %s", m.Bin, existing.Bin)
+		}
+		if m.Nodes != existing.Nodes {
+			log.Fatalf("node count changed: %d != %d", m.Nodes, existing.Nodes)
+		}
+		if m.Env != existing.Env {
+			log.Fatalf("environment changed: \"%s\" != \"%s\"", m.Env, existing.Env)
+		}
+	}
 	fmt.Printf("%s: %s\n", c.name, dir)
-	saveJSON(filepath.Join(dir, "metadata"), m)
 
 	for i := 1; i <= 64; i++ {
-		func() {
-			concurrency := i * c.count
-			f, err := os.Create(fmt.Sprintf("%s/%d", dir, concurrency))
+		concurrency := i * c.count
+		runName := fmt.Sprint(concurrency)
+		if run, err := loadTestRun(dir, runName); err == nil && run != nil {
+			continue
+		}
+
+		err := func() error {
+			f, err := os.Create(filepath.Join(dir, runName))
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -133,41 +160,22 @@ func kv95(clusterName string) {
 			cmd := fmt.Sprintf(m.Test, concurrency)
 			stdout := io.MultiWriter(f, os.Stdout)
 			stderr := io.MultiWriter(f, os.Stderr)
-			c.runLoad(cmd, stdout, stderr)
+			return c.runLoad(cmd, stdout, stderr)
 		}()
+		if err != nil {
+			if !isSigKill(err) {
+				fmt.Printf("%s\n", err)
+			}
+			break
+		}
 	}
 	c.stop()
 }
 
-func kv0(clusterName string) {
-	c := testCluster(clusterName)
-	m := testMetadata{
-		Bin:   cockroachVersion(c),
-		Nodes: c.count,
-		Env:   c.env,
-		Test: fmt.Sprintf(
-			"./kv --duration=%s --read-percent=0 --splits=1000 --concurrency=%%d",
-			duration),
-	}
-	dir := testDir("kv_0", m.Bin)
-	fmt.Printf("%s: %s\n", c.name, dir)
-	saveJSON(filepath.Join(dir, "metadata"), m)
+func kv0(clusterName, dir string) {
+	kvTest(clusterName, "kv_0", dir, "./kv --read-percent=0 --splits=1000")
+}
 
-	for i := 1; i <= 64; i++ {
-		func() {
-			concurrency := i * c.count
-			f, err := os.Create(fmt.Sprintf("%s/%d", dir, concurrency))
-			if err != nil {
-				log.Fatal(err)
-			}
-			defer f.Close()
-			c.wipe()
-			c.start()
-			cmd := fmt.Sprintf(m.Test, concurrency)
-			stdout := io.MultiWriter(f, os.Stdout)
-			stderr := io.MultiWriter(f, os.Stderr)
-			c.runLoad(cmd, stdout, stderr)
-		}()
-	}
-	c.stop()
+func kv95(clusterName, dir string) {
+	kvTest(clusterName, "kv_95", dir, "./kv --read-percent=95 --splits=1000")
 }
