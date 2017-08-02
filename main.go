@@ -39,7 +39,10 @@ func newCluster(args []string) (*cluster, error) {
 	if name == "" {
 		return nil, fmt.Errorf("no cluster specified")
 	}
-	info := clusterSizes[name]
+	info, ok := clusterSizes[name]
+	if !ok {
+		return nil, fmt.Errorf("unknown cluster: %s", name)
+	}
 	return &cluster{
 		name:    name,
 		count:   clusterNodes,
