@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 )
@@ -31,11 +33,20 @@ var clusterSizes = map[string]clusterInfo{
 	"omega":    {6, 0},
 }
 
-func newCluster(args []string) (*cluster, error) {
+func isCluster(name string) bool {
+	_, ok := clusterSizes[name]
+	return ok
+}
+
+func clusterName(args []string) string {
 	name := os.Getenv("CLUSTER")
 	if len(args) >= 1 {
 		name = args[0]
 	}
+	return name
+}
+
+func newCluster(name string) (*cluster, error) {
 	if name == "" {
 		return nil, fmt.Errorf("no cluster specified")
 	}
@@ -67,7 +78,7 @@ var startCmd = &cobra.Command{
 	Short: "start a cluster",
 	Long:  ``,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		c, err := newCluster(args)
+		c, err := newCluster(clusterName(args))
 		if err != nil {
 			return err
 		}
@@ -81,7 +92,7 @@ var stopCmd = &cobra.Command{
 	Short: "stop a cluster",
 	Long:  ``,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		c, err := newCluster(args)
+		c, err := newCluster(clusterName(args))
 		if err != nil {
 			return err
 		}
@@ -95,7 +106,7 @@ var wipeCmd = &cobra.Command{
 	Short: "wipe a cluster",
 	Long:  ``,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		c, err := newCluster(args)
+		c, err := newCluster(clusterName(args))
 		if err != nil {
 			return err
 		}
@@ -109,7 +120,7 @@ var statusCmd = &cobra.Command{
 	Short: "retrieve the status of a cluster",
 	Long:  ``,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		c, err := newCluster(args)
+		c, err := newCluster(clusterName(args))
 		if err != nil {
 			return err
 		}
@@ -119,19 +130,22 @@ var statusCmd = &cobra.Command{
 }
 
 var testCmd = &cobra.Command{
-	Use:   "test <cluster>",
+	Use:   "test <cluster> <name>",
 	Short: "run a test on a cluster",
-	Long:  ``,
+	Long:  "run a test on a cluster\n\n\t" + strings.Join(allTests(), "\n\t") + "\n",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		c, err := newCluster(args)
-		if err != nil {
-			return err
+		clusterName := os.Getenv("CLUSTER")
+		if len(args) >= 1 && isCluster(args[0]) {
+			clusterName = args[0]
+			args = args[1:]
 		}
-		c.wipe()
-		c.start()
-		c.run()
-		c.stop()
-		return nil
+		if !isCluster(clusterName) {
+			return fmt.Errorf("unknown cluster: %s", clusterName)
+		}
+		if len(args) != 1 {
+			return fmt.Errorf("no test specified")
+		}
+		return runTest(args[0], clusterName)
 	},
 }
 
@@ -151,7 +165,7 @@ var putCmd = &cobra.Command{
 		if len(args) == 3 {
 			dest = args[2]
 		}
-		c, err := newCluster(args)
+		c, err := newCluster(clusterName(args))
 		if err != nil {
 			return err
 		}
@@ -200,6 +214,9 @@ func main() {
 		&secure, "secure", false, "use a secure cluster")
 	rootCmd.PersistentFlags().StringVarP(
 		&env, "env", "e", env, "cockroach node environment variables")
+
+	testCmd.PersistentFlags().DurationVar(
+		&duration, "duration", 5*time.Minute, "The duration to run each test")
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)

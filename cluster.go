@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"math"
 	"os"
@@ -136,7 +137,36 @@ func (c *cluster) status() {
 	}
 }
 
-func (c *cluster) run() {
+func (c *cluster) cockroachVersions() map[string]int {
+	sha := make(map[string]int)
+	var mu sync.Mutex
+
+	display := fmt.Sprintf("%s: cockroach version", c.name)
+	c.parallel(display, 1, c.count, func(host string) ([]byte, error) {
+		session, err := newSSHSession("cockroach", host)
+		if err != nil {
+			return nil, err
+		}
+		defer session.Close()
+
+		cmd := "./cockroach version | awk '/Build Tag:/ {print $NF}'"
+		out, err := session.CombinedOutput(cmd)
+		var s string
+		if err != nil {
+			s = err.Error()
+		} else {
+			s = strings.TrimSpace(string(out))
+		}
+		mu.Lock()
+		sha[s]++
+		mu.Unlock()
+		return nil, err
+	})
+
+	return sha
+}
+
+func (c *cluster) runLoad(cmd string, stdout, stderr io.Writer) {
 	if c.loadGen == 0 {
 		log.Fatalf("no load generator node specified for cluster: %s", c.name)
 	}
@@ -156,8 +186,8 @@ func (c *cluster) run() {
 		}
 	}()
 
-	session.Stdout = os.Stdout
-	session.Stderr = os.Stderr
+	session.Stdout = stdout
+	session.Stderr = stderr
 	url := "postgres://root@localhost:27183/test"
 	if c.secure {
 		url += "?sslcert=%2Fhome%2Fcockroach%2Fcerts%2Fnode.crt&" +
@@ -166,7 +196,6 @@ func (c *cluster) run() {
 	} else {
 		url += "?sslmode=disable"
 	}
-	const cmd = "./kv --duration=1h --read-percent=95 --concurrency=10 --splits=10"
 	fmt.Println(cmd)
 	if err := session.Run(cmd + " '" + url + "'"); err != nil {
 		if !isSigKill(err) {
