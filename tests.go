@@ -81,9 +81,10 @@ func testDir(name, vers string) string {
 }
 
 type testMetadata struct {
-	Bin  string
-	Env  string
-	Test string
+	Bin   string
+	Nodes int
+	Env   string
+	Test  string
 }
 
 func prettyJSON(v interface{}) string {
@@ -107,13 +108,15 @@ func saveJSON(path string, v interface{}) {
 func kv95(clusterName string) {
 	c := testCluster(clusterName)
 	m := testMetadata{
-		Env: c.env,
-		Bin: cockroachVersion(c),
+		Bin:   cockroachVersion(c),
+		Nodes: c.count,
+		Env:   c.env,
 		Test: fmt.Sprintf(
 			"./kv --duration=%s --read-percent=95 --splits=1000 --concurrency=%%d",
 			duration),
 	}
 	dir := testDir("kv_95", m.Bin)
+	fmt.Printf("%s: %s\n", c.name, dir)
 	saveJSON(filepath.Join(dir, "metadata"), m)
 
 	for i := 1; i <= 64; i++ {
