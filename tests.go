@@ -47,7 +47,7 @@ func kv95(clusterName string) {
 	}
 	versions := c.cockroachVersions()
 	if len(versions) == 0 {
-		log.Fatalf("unknown to determine cockroach version")
+		log.Fatalf("unable to determine cockroach version")
 	} else if len(versions) > 1 {
 		log.Fatalf("mismatched cockroach versions: %v", versions)
 	}
