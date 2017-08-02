@@ -159,8 +159,7 @@ var analyzeCmd = &cobra.Command{
 	Short: "analyze test output",
 	Long:  ``,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		fmt.Println(args)
-		return nil
+		return analyze(args)
 	},
 }
 
