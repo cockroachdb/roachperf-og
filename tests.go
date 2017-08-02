@@ -1,7 +1,7 @@
 package main
 
 import (
-	"encoding/json"
+	"bytes"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"time"
 )
 
@@ -21,6 +22,84 @@ var tests = map[string]func(clusterName, dir string){
 }
 
 var dirRE = regexp.MustCompile(`^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}_[0-9]{2}_[0-9]{2}\.([^.]+)\.`)
+
+type testMetadata struct {
+	Bin   string
+	Nodes int
+	Env   string
+	Test  string
+}
+
+type testRun struct {
+	concurrency int
+	elapsed     float64
+	errors      int64
+	ops         int64
+	opsSec      float64
+	avgLat      float64
+	p50Lat      float64
+	p95Lat      float64
+	p99Lat      float64
+}
+
+func loadTestRun(dir, name string) (*testRun, error) {
+	n, err := strconv.Atoi(name)
+	if err != nil {
+		return nil, nil
+	}
+	r := &testRun{concurrency: n}
+
+	b, err := ioutil.ReadFile(filepath.Join(dir, name))
+	if err != nil {
+		return nil, err
+	}
+
+	const header = `_elapsed___errors_____ops(total)___ops/sec(cum)__avg(ms)__p50(ms)__p95(ms)__p99(ms)_pMax(ms)`
+	i := bytes.Index(b, []byte(header))
+	if i == -1 {
+		return nil, nil
+	}
+	b = b[i+len(header)+1:]
+
+	_, err = fmt.Fscanf(bytes.NewReader(b), " %fs %d %d %f %f %f %f %f",
+		&r.elapsed, &r.errors, &r.ops, &r.opsSec, &r.avgLat, &r.p50Lat, &r.p95Lat, &r.p99Lat)
+	if err != nil {
+		return nil, err
+	}
+	return r, nil
+}
+
+type testData struct {
+	metadata testMetadata
+	runs     []*testRun
+}
+
+func loadTestData(dir string) (*testData, error) {
+	d := &testData{}
+	if err := loadJSON(filepath.Join(dir, "metadata"), &d.metadata); err != nil {
+		return nil, err
+	}
+
+	ents, err := ioutil.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, e := range ents {
+		r, err := loadTestRun(dir, e.Name())
+		if err != nil {
+			return nil, err
+		}
+		if r != nil {
+			d.runs = append(d.runs, r)
+		}
+	}
+
+	sort.Slice(d.runs, func(i, j int) bool {
+		return d.runs[i].concurrency < d.runs[j].concurrency
+	})
+	return d, nil
+}
 
 func findTest(name string) (_ func(clusterName, dir string), dir string) {
 	fn := tests[name]
@@ -87,31 +166,6 @@ func testDir(name, vers string) string {
 		log.Fatal(err)
 	}
 	return dir
-}
-
-type testMetadata struct {
-	Bin   string
-	Nodes int
-	Env   string
-	Test  string
-}
-
-func prettyJSON(v interface{}) string {
-	data, err := json.MarshalIndent(v, "", "\t")
-	if err != nil {
-		log.Fatal(err)
-	}
-	return string(data)
-}
-
-func saveJSON(path string, v interface{}) {
-	data, err := json.MarshalIndent(v, "", "\t")
-	if err != nil {
-		log.Fatal(err)
-	}
-	if err := ioutil.WriteFile(path, data, 0666); err != nil {
-		log.Fatal(err)
-	}
 }
 
 func kvTest(clusterName, testName, dir, cmd string) {
