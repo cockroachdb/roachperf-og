@@ -113,7 +113,15 @@ func (c *cluster) status() {
 			}
 			defer session.Close()
 
-			cmd := "lsof -i :26257 -i :27183 | awk '!/COMMAND/ {print $1, $2}' | sort | uniq"
+			const cmd = `
+out=$(lsof -i :26257 -i :27183 | awk '!/COMMAND/ {print $1, $2}' | sort | uniq);
+vers=$(./cockroach version 2>/dev/null | awk '/Build Tag:/ {print $NF}')
+if [ -n "${out}" -a -n "${vers}" ]; then
+  echo ${out} | sed "s/cockroach/cockroach-${vers}/g"
+else
+  echo ${out}
+fi
+`
 			out, err := session.CombinedOutput(cmd)
 			var msg string
 			if err != nil {
