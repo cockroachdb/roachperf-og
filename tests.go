@@ -62,7 +62,7 @@ func kv95(clusterName string) {
 		log.Fatal(err)
 	}
 
-	for i := 1; i <= 1; i++ {
+	for i := 1; i <= 64; i++ {
 		func() {
 			concurrency := i * c.count
 			f, err := os.Create(fmt.Sprintf("%s/%d", dir, concurrency))
