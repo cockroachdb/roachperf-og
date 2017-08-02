@@ -57,7 +57,7 @@ func kv95(clusterName string) {
 		break
 	}
 
-	dir := fmt.Sprintf("%s.kv_95.%s", time.Now().Format("2006-01-02T15_04_05"), vers)
+	dir := fmt.Sprintf("%s.kv_95.cockroach-%s", time.Now().Format("2006-01-02T15_04_05"), vers)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		log.Fatal(err)
 	}
