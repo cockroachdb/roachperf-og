@@ -176,7 +176,7 @@ func (c *cluster) cockroachVersions() map[string]int {
 
 func (c *cluster) runLoad(cmd string, stdout, stderr io.Writer) {
 	if c.loadGen == 0 {
-		log.Fatalf("no load generator node specified for cluster: %s", c.name)
+		log.Fatalf("%s: no load generator node specified", c.name)
 	}
 
 	session, err := newSSHSession("cockroach", c.host(c.loadGen))
