@@ -189,8 +189,10 @@ var dumpCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		fmt.Println(d.metadata.Test)
+		fmt.Println("_____N____ops/sec__avg(ms)__p50(ms)__p95(ms)__p99(ms)")
 		for _, r := range d.runs {
-			fmt.Printf("  %3d %8.1f %5.1f %5.1f %5.1f %5.1f\n", r.concurrency,
+			fmt.Printf("%6d %10.1f %8.1f %8.1f %8.1f %8.1f\n", r.concurrency,
 				r.opsSec, r.avgLat, r.p50Lat, r.p95Lat, r.p99Lat)
 		}
 		return nil
