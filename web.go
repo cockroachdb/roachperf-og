@@ -115,10 +115,13 @@ func web2(d1, d2 *testData) error {
 		t := float64(concurrency-a.concurrency) / float64(b.concurrency-a.concurrency)
 		return testRun{
 			concurrency: concurrency,
+			elapsed:     a.elapsed + float64(b.elapsed-a.elapsed)*t,
 			ops:         a.ops + int64(float64(b.ops-a.ops)*t),
 			opsSec:      a.opsSec + float64(b.opsSec-a.opsSec)*t,
+			avgLat:      a.avgLat + float64(b.avgLat-a.avgLat)*t,
+			p50Lat:      a.p50Lat + float64(b.p50Lat-a.p50Lat)*t,
+			p95Lat:      a.p95Lat + float64(b.p95Lat-a.p95Lat)*t,
 			p99Lat:      a.p99Lat + float64(b.p99Lat-a.p99Lat)*t,
-			// TODO(peter): interpolate the other fields.
 		}
 	}
 
