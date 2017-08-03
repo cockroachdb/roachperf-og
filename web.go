@@ -43,8 +43,21 @@ func web1(d *testData) error {
 	if err != nil {
 		return err
 	}
+
+	type series struct {
+		TargetAxisIndex int
+		Color           string
+		LineDashStyle   []int
+	}
 	m := map[string]interface{}{
-		"data": data,
+		"data":  data,
+		"haxis": "concurrency",
+		"vaxes": []string{"ops/sec", "latency (ms)"},
+		"series": []series{
+			{0, "#ff0000", []int{}},
+			{1, "#ff0000", []int{2, 2}},
+			{1, "#ff0000", []int{4, 4}},
+		},
 	}
 
 	f, err := ioutil.TempFile("", "web")
@@ -52,6 +65,7 @@ func web1(d *testData) error {
 		return err
 	}
 	defer f.Close()
+	// return t.Execute(os.Stdout, m)
 	if err := t.Execute(f, m); err != nil {
 		return err
 	}
@@ -84,16 +98,17 @@ const webHTML = `<html>
           legend: { position: 'top', alignment: 'center' },
           crosshair: { trigger: 'both', opacity: 0.35 },
           series: {
-            0: {targetAxisIndex: 0, color: '#ff0000'},
-            1: {targetAxisIndex: 1, color: '#ff0000', lineWidth: 1, lineDashStyle: [2, 2]},
-            2: {targetAxisIndex: 1, color: '#ff0000', lineWidth: 1, lineDashStyle: [2, 2]},
+            {{- range $i, $e := .series }}
+            {{ $i }}: {targetAxisIndex: {{- $e.TargetAxisIndex }}, color: {{ $e.Color }}, lineDashStyle: {{ $e.LineDashStyle }}},
+            {{- end }}
           },
           vAxes: {
-            0: {title: 'ops/sec'},
-            1: {title: 'latency (ms)'},
+            {{- range $i, $e := .vaxes }}
+            {{ $i }}: {title: {{ $e }}},
+            {{- end }}
           },
           hAxis: {
-            title: 'concurrency',
+            title: {{ .haxis }},
           },
         };
         var chart = new google.visualization.LineChart(document.getElementById('chart'));
