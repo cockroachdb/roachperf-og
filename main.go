@@ -169,9 +169,11 @@ restarting the test will fail.
 }
 
 var webCmd = &cobra.Command{
-	Use:   "web <testdir> [<testdir>...]",
-	Short: "compare test output",
-	Long:  ``,
+	Use:   "web <testdir> [<testdir>]",
+	Short: "visualize and compare test output",
+	Long: `
+Visualize the output of a single test or compare the output of two tests.
+`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return web(args)
 	},

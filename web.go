@@ -9,6 +9,14 @@ import (
 )
 
 func web(dirs []string) error {
+	switch len(dirs) {
+	case 0:
+		return fmt.Errorf("no test directory specified")
+	case 1, 2:
+	default:
+		return fmt.Errorf("too many test directories: %s", dirs)
+	}
+
 	var data []*testData
 	for _, dir := range dirs {
 		d, err := loadTestData(dir)
@@ -18,16 +26,10 @@ func web(dirs []string) error {
 		data = append(data, d)
 	}
 
-	switch len(data) {
-	case 0:
-		return fmt.Errorf("no test directory specified")
-	case 1:
+	if len(data) == 1 {
 		return web1(data[0])
-	case 2:
-		return web2(data)
-	default:
-		return webN(data)
 	}
+	return web2(data[0], data[1])
 }
 
 func webApply(m interface{}) error {
@@ -76,16 +78,14 @@ func web1(d *testData) error {
 	return webApply(m)
 }
 
-func web2(d []*testData) error {
-	minConcurrency := d[0].runs[0].concurrency
-	maxConcurrency := d[0].runs[len(d[0].runs)-1].concurrency
-	for i := 1; i < len(d); i++ {
-		if minConcurrency < d[i].runs[0].concurrency {
-			minConcurrency = d[i].runs[0].concurrency
-		}
-		if n := len(d[i].runs); maxConcurrency > d[i].runs[n-1].concurrency {
-			maxConcurrency = d[i].runs[n-1].concurrency
-		}
+func web2(d1, d2 *testData) error {
+	minConcurrency := d1.runs[0].concurrency
+	if c := d2.runs[0].concurrency; minConcurrency < c {
+		minConcurrency = c
+	}
+	maxConcurrency := d1.runs[len(d1.runs)-1].concurrency
+	if c := d2.runs[len(d2.runs)-1].concurrency; maxConcurrency > c {
+		maxConcurrency = c
 	}
 
 	have := func(d *testData, concurrency int) bool {
@@ -121,18 +121,18 @@ func web2(d []*testData) error {
 	data := []interface{}{
 		[]interface{}{
 			"concurrency",
-			fmt.Sprintf("ops/sec (%s)", d[0].metadata.Bin),
-			fmt.Sprintf("99%%-lat (%s)", d[0].metadata.Bin),
-			fmt.Sprintf("ops/sec (%s)", d[1].metadata.Bin),
-			fmt.Sprintf("99%%-lat (%s)", d[1].metadata.Bin),
+			fmt.Sprintf("ops/sec (%s)", d1.metadata.Bin),
+			fmt.Sprintf("99%%-lat (%s)", d1.metadata.Bin),
+			fmt.Sprintf("ops/sec (%s)", d2.metadata.Bin),
+			fmt.Sprintf("99%%-lat (%s)", d2.metadata.Bin),
 		},
 	}
 	for i := minConcurrency; i <= maxConcurrency; i++ {
-		if !have(d[0], i) && !have(d[1], i) {
+		if !have(d1, i) && !have(d2, i) {
 			continue
 		}
-		r0 := get(d[0], i)
-		r1 := get(d[1], i)
+		r0 := get(d1, i)
+		r1 := get(d2, i)
 		data = append(data, []interface{}{
 			i, r0.opsSec, r0.p99Lat, r1.opsSec, r1.p99Lat,
 		})
@@ -150,10 +150,6 @@ func web2(d []*testData) error {
 		},
 	}
 	return webApply(m)
-}
-
-func webN(d []*testData) error {
-	return fmt.Errorf("unimplemented")
 }
 
 const webHTML = `<html>
