@@ -132,7 +132,21 @@ var statusCmd = &cobra.Command{
 var testCmd = &cobra.Command{
 	Use:   "test <cluster> <name>",
 	Short: "run a test on a cluster",
-	Long:  "run a test on a cluster\n\n\t" + strings.Join(allTests(), "\n\t") + "\n",
+	Long: `
+Run a test on a cluster, placing results in a timestamped directory. The test
+<name> must be one of:
+
+	` + strings.Join(allTests(), "\n\t") + `
+
+Alternately, an interrupted test can be resumed by specifying <name> as the
+output directory of a previous test. For example:
+
+	roachperf test denim 2017-08-02T14_06_41.kv_0.cockroach-6151ae1
+
+will restart the kv_0 test on denim using the cockroach binary with the build
+tag 6151ae1. If the test, environment or cockroach build tag do not match,
+restarting the test will fail.
+`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		clusterName := os.Getenv("CLUSTER")
 		if len(args) >= 1 && isCluster(args[0]) {
