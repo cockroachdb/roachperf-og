@@ -209,39 +209,15 @@ var putCmd = &cobra.Command{
 }
 
 func main() {
-	// TODO(peter):
-	//
-	// Test
-	// - cluster config + load generator
-	// - output per directory
-	// - "cockroach version"
-	// - environment variables
-	// - cluster settings
-	// - parameterized on cluster config and load
-	// - wipe cluster
-	// - start cluster
-	// - start load
-	// - gather results
-	// - wipe cluster
-	//
-	// Analyzer
-	// - compare output from two tests
-	//   - ops/sec
-	//   - avg/50%/95%/99% latency
-	//
-	// Initial tests
-	// - Read scalability
-	// - Write scalability
-
 	rootCmd.AddCommand(
-		startCmd,
-		stopCmd,
-		wipeCmd,
-		statusCmd,
-		testCmd,
-		visualizeCmd,
 		dumpCmd,
 		putCmd,
+		startCmd,
+		statusCmd,
+		stopCmd,
+		testCmd,
+		visualizeCmd,
+		wipeCmd,
 	)
 
 	rootCmd.PersistentFlags().IntVarP(
