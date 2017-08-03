@@ -3,10 +3,11 @@ package main
 import (
 	"fmt"
 	"html/template"
-	"os"
+	"io/ioutil"
+	"os/exec"
 )
 
-func visualize(dirs []string) error {
+func web(dirs []string) error {
 	var data []*testData
 	for _, dir := range dirs {
 		d, err := loadTestData(dir)
@@ -20,15 +21,15 @@ func visualize(dirs []string) error {
 	case 0:
 		return fmt.Errorf("no test directory specified")
 	case 1:
-		return visualize1(data[0])
+		return web1(data[0])
 	case 2:
-		return visualize2(data)
+		return web2(data)
 	default:
-		return visualizeN(data)
+		return webN(data)
 	}
 }
 
-func visualize1(d *testData) error {
+func web1(d *testData) error {
 	data := []interface{}{
 		[]interface{}{"concurrency", "ops/sec", "avg latency", "99%-tile latency"},
 	}
@@ -38,28 +39,34 @@ func visualize1(d *testData) error {
 		})
 	}
 
-	t, err := template.New("visualize").Parse(visualizeHTML)
+	t, err := template.New("web").Parse(webHTML)
 	if err != nil {
 		return err
 	}
 	m := map[string]interface{}{
 		"data": data,
 	}
-	if err := t.Execute(os.Stdout, m); err != nil {
+
+	f, err := ioutil.TempFile("", "web")
+	if err != nil {
 		return err
 	}
-	return nil
+	defer f.Close()
+	if err := t.Execute(f, m); err != nil {
+		return err
+	}
+	return exec.Command("open", f.Name()).Run()
 }
 
-func visualize2(d []*testData) error {
+func web2(d []*testData) error {
 	return fmt.Errorf("unimplemented")
 }
 
-func visualizeN(d []*testData) error {
+func webN(d []*testData) error {
 	return fmt.Errorf("unimplemented")
 }
 
-const visualizeHTML = `<html>
+const webHTML = `<html>
   <head>
     <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
     <script type="text/javascript">

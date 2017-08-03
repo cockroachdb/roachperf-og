@@ -168,12 +168,12 @@ restarting the test will fail.
 	},
 }
 
-var visualizeCmd = &cobra.Command{
-	Use:   "visualize <testdir> [<testdir>...]",
-	Short: "visualize test output",
+var webCmd = &cobra.Command{
+	Use:   "web <testdir> [<testdir>...]",
+	Short: "compare test output",
 	Long:  ``,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return visualize(args)
+		return web(args)
 	},
 }
 
@@ -230,7 +230,7 @@ func main() {
 		statusCmd,
 		stopCmd,
 		testCmd,
-		visualizeCmd,
+		webCmd,
 		wipeCmd,
 	)
 
