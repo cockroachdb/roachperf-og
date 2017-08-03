@@ -7,16 +7,28 @@ import (
 )
 
 func visualize(dirs []string) error {
-	if len(dirs) != 1 {
+	var data []*testData
+	for _, dir := range dirs {
+		d, err := loadTestData(dir)
+		if err != nil {
+			return err
+		}
+		data = append(data, d)
+	}
+
+	switch len(data) {
+	case 0:
 		return fmt.Errorf("no test directory specified")
+	case 1:
+		return visualize1(data[0])
+	case 2:
+		return visualize2(data)
+	default:
+		return visualizeN(data)
 	}
-	// TODO(peter): Support comparison between 2 or more tests.
+}
 
-	d, err := loadTestData(dirs[0])
-	if err != nil {
-		return err
-	}
-
+func visualize1(d *testData) error {
 	data := []interface{}{
 		[]interface{}{"concurrency", "ops/sec", "avg latency", "99%-tile latency"},
 	}
@@ -37,6 +49,14 @@ func visualize(dirs []string) error {
 		return err
 	}
 	return nil
+}
+
+func visualize2(d []*testData) error {
+	return fmt.Errorf("unimplemented")
+}
+
+func visualizeN(d []*testData) error {
+	return fmt.Errorf("unimplemented")
 }
 
 const visualizeHTML = `<html>
