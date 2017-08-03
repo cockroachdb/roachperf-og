@@ -184,6 +184,7 @@ var dumpCmd = &cobra.Command{
 	Short: "dump test output",
 	Long:  ``,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		// TODO(peter): allow dumping the comparison of two tests
 		if len(args) != 1 {
 			return fmt.Errorf("no test directory specified")
 		}

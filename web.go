@@ -9,6 +9,8 @@ import (
 )
 
 func web(dirs []string) error {
+	// TODO(peter): visualize the output of a single test run, showing
+	// performance and latency over time.
 	switch len(dirs) {
 	case 0:
 		return fmt.Errorf("no test directory specified")
@@ -115,6 +117,8 @@ func web2(d1, d2 *testData) error {
 			concurrency: concurrency,
 			ops:         a.ops + int64(float64(b.ops-a.ops)*t),
 			opsSec:      a.opsSec + float64(b.opsSec-a.opsSec)*t,
+			p99Lat:      a.p99Lat + float64(b.p99Lat-a.p99Lat)*t,
+			// TODO(peter): interpolate the other fields.
 		}
 	}
 
