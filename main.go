@@ -182,25 +182,11 @@ Visualize the output of a single test or compare the output of two tests.
 }
 
 var dumpCmd = &cobra.Command{
-	Use:   "dump <testdir>",
+	Use:   "dump <testdir> [<testdir>]",
 	Short: "dump test output",
 	Long:  ``,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// TODO(peter): allow dumping the comparison of two tests
-		if len(args) != 1 {
-			return fmt.Errorf("no test directory specified")
-		}
-		d, err := loadTestData(args[0])
-		if err != nil {
-			return err
-		}
-		fmt.Println(d.metadata.Test)
-		fmt.Println("_____N____ops/sec__avg(ms)__p50(ms)__p95(ms)__p99(ms)")
-		for _, r := range d.runs {
-			fmt.Printf("%6d %10.1f %8.1f %8.1f %8.1f %8.1f\n", r.concurrency,
-				r.opsSec, r.avgLat, r.p50Lat, r.p95Lat, r.p99Lat)
-		}
-		return nil
+		return dump(args)
 	},
 }
 
