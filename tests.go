@@ -102,6 +102,69 @@ func loadTestData(dir string) (*testData, error) {
 	return d, nil
 }
 
+func (d *testData) exists(concurrency int) bool {
+	i := sort.Search(len(d.runs), func(j int) bool {
+		return d.runs[j].concurrency >= concurrency
+	})
+	return i < len(d.runs) && d.runs[i].concurrency == concurrency
+}
+
+func (d *testData) get(concurrency int) *testRun {
+	i := sort.Search(len(d.runs), func(j int) bool {
+		return d.runs[j].concurrency >= concurrency
+	})
+	if i+1 >= len(d.runs) {
+		return d.runs[len(d.runs)-1]
+	}
+	if i < 0 {
+		return d.runs[0]
+	}
+	a := d.runs[i]
+	b := d.runs[i+1]
+	t := float64(concurrency-a.concurrency) / float64(b.concurrency-a.concurrency)
+	return &testRun{
+		concurrency: concurrency,
+		elapsed:     a.elapsed + float64(b.elapsed-a.elapsed)*t,
+		ops:         a.ops + int64(float64(b.ops-a.ops)*t),
+		opsSec:      a.opsSec + float64(b.opsSec-a.opsSec)*t,
+		avgLat:      a.avgLat + float64(b.avgLat-a.avgLat)*t,
+		p50Lat:      a.p50Lat + float64(b.p50Lat-a.p50Lat)*t,
+		p95Lat:      a.p95Lat + float64(b.p95Lat-a.p95Lat)*t,
+		p99Lat:      a.p99Lat + float64(b.p99Lat-a.p99Lat)*t,
+	}
+}
+
+func alignTestData(d1, d2 *testData) (*testData, *testData) {
+	minConcurrency := d1.runs[0].concurrency
+	if c := d2.runs[0].concurrency; minConcurrency < c {
+		minConcurrency = c
+	}
+	maxConcurrency := d1.runs[len(d1.runs)-1].concurrency
+	if c := d2.runs[len(d2.runs)-1].concurrency; maxConcurrency > c {
+		maxConcurrency = c
+	}
+
+	var r1 []*testRun
+	var r2 []*testRun
+	for i := minConcurrency; i <= maxConcurrency; i++ {
+		if !d1.exists(i) && !d2.exists(i) {
+			continue
+		}
+		r1 = append(r1, d1.get(i))
+		r2 = append(r2, d2.get(i))
+	}
+
+	d1 = &testData{
+		metadata: d1.metadata,
+		runs:     r1,
+	}
+	d2 = &testData{
+		metadata: d2.metadata,
+		runs:     r2,
+	}
+	return d1, d2
+}
+
 func findTest(name string) (_ func(clusterName, dir string), dir string) {
 	fn := tests[name]
 	if fn != nil {

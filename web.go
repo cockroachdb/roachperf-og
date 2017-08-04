@@ -5,33 +5,30 @@ import (
 	"html/template"
 	"io/ioutil"
 	"os/exec"
-	"sort"
 )
 
 func web(dirs []string) error {
 	// TODO(peter): visualize the output of a single test run, showing
 	// performance and latency over time.
-	switch len(dirs) {
+	switch n := len(dirs); n {
 	case 0:
 		return fmt.Errorf("no test directory specified")
 	case 1, 2:
-	default:
-		return fmt.Errorf("too many test directories: %s", dirs)
-	}
-
-	var data []*testData
-	for _, dir := range dirs {
-		d, err := loadTestData(dir)
+		d1, err := loadTestData(dirs[0])
 		if err != nil {
 			return err
 		}
-		data = append(data, d)
+		if n == 1 {
+			return web1(d1)
+		}
+		d2, err := loadTestData(dirs[1])
+		if err != nil {
+			return err
+		}
+		return web2(d1, d2)
+	default:
+		return fmt.Errorf("too many test directories: %s", dirs)
 	}
-
-	if len(data) == 1 {
-		return web1(data[0])
-	}
-	return web2(data[0], data[1])
 }
 
 func webApply(m interface{}) error {
@@ -81,46 +78,7 @@ func web1(d *testData) error {
 }
 
 func web2(d1, d2 *testData) error {
-	minConcurrency := d1.runs[0].concurrency
-	if c := d2.runs[0].concurrency; minConcurrency < c {
-		minConcurrency = c
-	}
-	maxConcurrency := d1.runs[len(d1.runs)-1].concurrency
-	if c := d2.runs[len(d2.runs)-1].concurrency; maxConcurrency > c {
-		maxConcurrency = c
-	}
-
-	have := func(d *testData, concurrency int) bool {
-		i := sort.Search(len(d.runs), func(j int) bool {
-			return d.runs[j].concurrency >= concurrency
-		})
-		return i < len(d.runs) && d.runs[i].concurrency == concurrency
-	}
-
-	get := func(d *testData, concurrency int) testRun {
-		i := sort.Search(len(d.runs), func(j int) bool {
-			return d.runs[j].concurrency >= concurrency
-		})
-		if i+1 >= len(d.runs) {
-			return *d.runs[len(d.runs)-1]
-		}
-		if i < 0 {
-			return *d.runs[0]
-		}
-		a := d.runs[i]
-		b := d.runs[i+1]
-		t := float64(concurrency-a.concurrency) / float64(b.concurrency-a.concurrency)
-		return testRun{
-			concurrency: concurrency,
-			elapsed:     a.elapsed + float64(b.elapsed-a.elapsed)*t,
-			ops:         a.ops + int64(float64(b.ops-a.ops)*t),
-			opsSec:      a.opsSec + float64(b.opsSec-a.opsSec)*t,
-			avgLat:      a.avgLat + float64(b.avgLat-a.avgLat)*t,
-			p50Lat:      a.p50Lat + float64(b.p50Lat-a.p50Lat)*t,
-			p95Lat:      a.p95Lat + float64(b.p95Lat-a.p95Lat)*t,
-			p99Lat:      a.p99Lat + float64(b.p99Lat-a.p99Lat)*t,
-		}
-	}
+	d1, d2 = alignTestData(d1, d2)
 
 	data := []interface{}{
 		[]interface{}{
@@ -131,14 +89,11 @@ func web2(d1, d2 *testData) error {
 			fmt.Sprintf("99%%-lat (%s)", d2.metadata.Bin),
 		},
 	}
-	for i := minConcurrency; i <= maxConcurrency; i++ {
-		if !have(d1, i) && !have(d2, i) {
-			continue
-		}
-		r0 := get(d1, i)
-		r1 := get(d2, i)
+	for i := range d1.runs {
+		r1 := d1.runs[i]
+		r2 := d2.runs[i]
 		data = append(data, []interface{}{
-			i, r0.opsSec, r0.p99Lat, r1.opsSec, r1.p99Lat,
+			r1.concurrency, r1.opsSec, r1.p99Lat, r2.opsSec, r2.p99Lat,
 		})
 	}
 
@@ -193,7 +148,7 @@ const webHTML = `<html>
     </script>
   </head>
   <body>
-    <div id="chart" style="width: 100%; height: 100%"></div>
+    <div id="chart" style="width: 800; height: 600"></div>
   </body>
 </html>
 `
