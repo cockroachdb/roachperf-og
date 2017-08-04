@@ -101,9 +101,6 @@ func web2(d1, d2 *testData) error {
 		i := sort.Search(len(d.runs), func(j int) bool {
 			return d.runs[j].concurrency >= concurrency
 		})
-		if i < len(d.runs) && d.runs[i].concurrency == concurrency {
-			return *d.runs[i]
-		}
 		if i+1 >= len(d.runs) {
 			return *d.runs[len(d.runs)-1]
 		}

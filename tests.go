@@ -24,10 +24,11 @@ var tests = map[string]func(clusterName, dir string){
 var dirRE = regexp.MustCompile(`^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}_[0-9]{2}_[0-9]{2}\.([^.]+)\.`)
 
 type testMetadata struct {
-	Bin   string
-	Nodes int
-	Env   string
-	Test  string
+	Bin     string
+	Cluster string
+	Nodes   int
+	Env     string
+	Test    string
 }
 
 type testRun struct {
@@ -171,10 +172,11 @@ func testDir(name, vers string) string {
 func kvTest(clusterName, testName, dir, cmd string) {
 	c := testCluster(clusterName)
 	m := testMetadata{
-		Bin:   cockroachVersion(c),
-		Nodes: c.count,
-		Env:   c.env,
-		Test:  fmt.Sprintf("%s --duration=%s --concurrency=%%d", cmd, duration),
+		Bin:     cockroachVersion(c),
+		Cluster: c.name,
+		Nodes:   c.count,
+		Env:     c.env,
+		Test:    fmt.Sprintf("%s --duration=%s --concurrency=%%d", cmd, duration),
 	}
 	if dir == "" {
 		dir = testDir(testName, m.Bin)

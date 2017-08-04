@@ -148,6 +148,8 @@ tag 6151ae1. If the test, environment or cockroach build tag do not match,
 restarting the test will fail.
 `,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		// TODO(peter): make the cluster name optional if a test directory is
+		// specified.
 		clusterName := os.Getenv("CLUSTER")
 		if len(args) >= 1 && isCluster(args[0]) {
 			clusterName = args[0]
