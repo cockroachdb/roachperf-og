@@ -233,6 +233,15 @@ func testDir(name, vers string) string {
 }
 
 func kvTest(clusterName, testName, dir, cmd string) {
+	var existing *testMetadata
+	if dir != "" {
+		existing = &testMetadata{}
+		if err := loadJSON(filepath.Join(dir, "metadata"), existing); err != nil {
+			log.Fatal(err)
+		}
+		clusterName = existing.Cluster
+	}
+
 	c := testCluster(clusterName)
 	m := testMetadata{
 		Bin:     cockroachVersion(c),
@@ -241,14 +250,10 @@ func kvTest(clusterName, testName, dir, cmd string) {
 		Env:     c.env,
 		Test:    fmt.Sprintf("%s --duration=%s --concurrency=%%d", cmd, duration),
 	}
-	if dir == "" {
+	if existing == nil {
 		dir = testDir(testName, m.Bin)
 		saveJSON(filepath.Join(dir, "metadata"), m)
 	} else {
-		existing := &testMetadata{}
-		if err := loadJSON(filepath.Join(dir, "metadata"), existing); err != nil {
-			log.Fatal(err)
-		}
 		if m.Bin != existing.Bin {
 			log.Fatalf("cockroach binary changed: %s != %s", m.Bin, existing.Bin)
 		}
