@@ -257,12 +257,8 @@ func kvTest(clusterName, testName, dir, cmd string) {
 		if m.Bin != existing.Bin {
 			log.Fatalf("cockroach binary changed: %s != %s", m.Bin, existing.Bin)
 		}
-		if m.Nodes != existing.Nodes {
-			log.Fatalf("node count changed: %d != %d", m.Nodes, existing.Nodes)
-		}
-		if m.Env != existing.Env {
-			log.Fatalf("environment changed: \"%s\" != \"%s\"", m.Env, existing.Env)
-		}
+		m.Nodes = existing.Nodes
+		m.Env = existing.Env
 	}
 	fmt.Printf("%s: %s\n", c.name, dir)
 
