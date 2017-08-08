@@ -15,26 +15,20 @@ var secure = false
 var env = "COCKROACH_ENABLE_RPC_COMPRESSION=false"
 
 type clusterInfo struct {
-	total   int
-	loadGen int
+	total      int
+	loadGen    int
+	hostFormat string
 }
 
-var clusterSizes = map[string]clusterInfo{
-	"adriatic": {6, 0},
-	"blue":     {10, 0},
-	"catrina":  {3, 0},
-	"cerulean": {4, 0},
-	"cobalt":   {6, 0},
-	"cyan":     {6, 0},
-	"denim":    {7, 7},
-	"indigo":   {9, 0},
-	"lapis":    {4, 0},
-	"navy":     {6, 0},
-	"omega":    {6, 0},
+const defaultHostFormat = "cockroach-%s-%04d.crdb.io"
+
+var clusters = map[string]clusterInfo{
+	"denim": {7, 7, defaultHostFormat},
+	"sky":   {64, 64, defaultHostFormat},
 }
 
 func isCluster(name string) bool {
-	_, ok := clusterSizes[name]
+	_, ok := clusters[name]
 	return ok
 }
 
@@ -50,17 +44,18 @@ func newCluster(name string) (*cluster, error) {
 	if name == "" {
 		return nil, fmt.Errorf("no cluster specified")
 	}
-	info, ok := clusterSizes[name]
+	info, ok := clusters[name]
 	if !ok {
 		return nil, fmt.Errorf("unknown cluster: %s", name)
 	}
 	return &cluster{
-		name:    name,
-		count:   clusterNodes,
-		total:   info.total,
-		loadGen: info.loadGen,
-		secure:  secure,
-		env:     env,
+		name:       name,
+		count:      clusterNodes,
+		total:      info.total,
+		loadGen:    info.loadGen,
+		secure:     secure,
+		hostFormat: info.hostFormat,
+		env:        env,
 	}, nil
 }
 

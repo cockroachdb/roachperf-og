@@ -14,16 +14,17 @@ import (
 )
 
 type cluster struct {
-	name    string
-	count   int
-	total   int
-	loadGen int
-	secure  bool
-	env     string
+	name       string
+	count      int
+	total      int
+	loadGen    int
+	secure     bool
+	hostFormat string
+	env        string
 }
 
 func (c *cluster) host(index int) string {
-	return fmt.Sprintf("cockroach-%s-%04d.crdb.io", c.name, index)
+	return fmt.Sprintf(c.hostFormat, c.name, index)
 }
 
 func (c *cluster) startNode(host, join string) ([]byte, error) {
@@ -114,7 +115,7 @@ func (c *cluster) status() {
 			defer session.Close()
 
 			const cmd = `
-out=$(lsof -i :26257 -i :27183 | awk '!/COMMAND/ {print $1, $2}' | sort | uniq);
+out=$(sudo lsof -i :26257 -i :27183 | awk '!/COMMAND/ {print $1, $2}' | sort | uniq);
 vers=$(./cockroach version 2>/dev/null | awk '/Build Tag:/ {print $NF}')
 if [ -n "${out}" -a -n "${vers}" ]; then
   echo ${out} | sed "s/cockroach/cockroach-${vers}/g"
