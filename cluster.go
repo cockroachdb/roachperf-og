@@ -55,66 +55,60 @@ func (c *cluster) startNode(host, join string) ([]byte, error) {
 func (c *cluster) start() {
 	display := fmt.Sprintf("%s: starting", c.name)
 	host1 := c.host(1)
-	c.parallel(display, 1, c.count, func(host string) ([]byte, error) {
-		return c.startNode(host, host1)
+	c.parallel(display, 1, c.count, func(i int) ([]byte, error) {
+		return c.startNode(c.host(i), host1)
 	})
-}
-
-func (c *cluster) stopNode(host string) ([]byte, error) {
-	session, err := newSSHSession("cockroach", host)
-	if err != nil {
-		return nil, err
-	}
-	defer session.Close()
-
-	const cmd = `
-sudo pkill -9 "cockroach|java|mongo" || true ;
-sudo kill -9 $(lsof -t -i :26257 -i :27183) 2>/dev/null || true ;
-`
-	return session.CombinedOutput(cmd)
 }
 
 func (c *cluster) stop() {
 	display := fmt.Sprintf("%s: stopping", c.name)
-	c.parallel(display, 1, c.total, c.stopNode)
+	c.parallel(display, 1, c.total, func(i int) ([]byte, error) {
+		session, err := newSSHSession("cockroach", c.host(i))
+		if err != nil {
+			return nil, err
+		}
+		defer session.Close()
+
+		const cmd = `
+sudo pkill -9 "cockroach|java|mongo" || true ;
+sudo kill -9 $(lsof -t -i :26257 -i :27183) 2>/dev/null || true ;
+`
+		return session.CombinedOutput(cmd)
+	})
 }
 
-func (c *cluster) wipeNode(host string) ([]byte, error) {
-	session, err := newSSHSession("cockroach", host)
-	if err != nil {
-		return nil, err
-	}
-	defer session.Close()
+func (c *cluster) wipe() {
+	display := fmt.Sprintf("%s: wiping", c.name)
+	c.parallel(display, 1, c.total, func(i int) ([]byte, error) {
+		session, err := newSSHSession("cockroach", c.host(i))
+		if err != nil {
+			return nil, err
+		}
+		defer session.Close()
 
-	const cmd = `
+		const cmd = `
 sudo pkill -9 "cockroach|java|mongo" || true ;
 sudo kill -9 $(lsof -t -i :26257 -i :27183) 2>/dev/null || true ;
 sudo find /mnt/data* -maxdepth 1 -type f -exec rm -f {} \; ;
 sudo rm -fr /mnt/data*/{auxiliary,local,tmp,cassandra,cockroach,mongo-data} \; ;
 sudo find /home/cockroach/logs -type f -not -name supervisor.log -exec rm -f {} \; ;
 `
-	return session.CombinedOutput(cmd)
-}
-
-func (c *cluster) wipe() {
-	display := fmt.Sprintf("%s: wiping", c.name)
-	c.parallel(display, 1, c.total, c.wipeNode)
+		return session.CombinedOutput(cmd)
+	})
 }
 
 func (c *cluster) status() {
-	fmt.Printf("%s: status\n", c.name)
-	results := make([]chan string, c.total)
-	for i := 0; i < c.total; i++ {
-		results[i] = make(chan string, 1)
-		go func(i int) {
-			session, err := newSSHSession("cockroach", c.host(i+1))
-			if err != nil {
-				results[i] <- err.Error()
-				return
-			}
-			defer session.Close()
+	display := fmt.Sprintf("%s: status", c.name)
+	results := make([]string, c.total)
+	c.parallel(display, 1, c.total, func(i int) ([]byte, error) {
+		session, err := newSSHSession("cockroach", c.host(i))
+		if err != nil {
+			results[i-1] = err.Error()
+			return nil, nil
+		}
+		defer session.Close()
 
-			const cmd = `
+		const cmd = `
 out=$(sudo lsof -i :26257 -i :27183 | awk '!/COMMAND/ {print $1, $2}' | sort | uniq);
 vers=$(./cockroach version 2>/dev/null | awk '/Build Tag:/ {print $NF}')
 if [ -n "${out}" -a -n "${vers}" ]; then
@@ -123,26 +117,22 @@ else
   echo ${out}
 fi
 `
-			out, err := session.CombinedOutput(cmd)
-			var msg string
-			if err != nil {
-				msg = err.Error()
-			} else {
-				msg = strings.TrimSpace(string(out))
-				if msg == "" {
-					msg = "cockroach not running"
-					if i+1 == c.loadGen {
-						msg = "not running"
-					}
-				}
+		out, err := session.CombinedOutput(cmd)
+		var msg string
+		if err != nil {
+			msg = err.Error()
+		} else {
+			msg = strings.TrimSpace(string(out))
+			if msg == "" {
+				msg = "not running"
 			}
-			results[i] <- msg
-		}(i)
-	}
+		}
+		results[i-1] = msg
+		return nil, nil
+	})
 
 	for i, r := range results {
-		s := <-r
-		fmt.Printf("  %2d: %s\n", i+1, s)
+		fmt.Printf("  %2d: %s\n", i+1, r)
 	}
 }
 
@@ -151,8 +141,8 @@ func (c *cluster) cockroachVersions() map[string]int {
 	var mu sync.Mutex
 
 	display := fmt.Sprintf("%s: cockroach version", c.name)
-	c.parallel(display, 1, c.count, func(host string) ([]byte, error) {
-		session, err := newSSHSession("cockroach", host)
+	c.parallel(display, 1, c.count, func(i int) ([]byte, error) {
+		session, err := newSSHSession("cockroach", c.host(i))
 		if err != nil {
 			return nil, err
 		}
@@ -306,8 +296,8 @@ func (c *cluster) stopLoad() {
 	}
 
 	display := fmt.Sprintf("%s: stopping load", c.name)
-	c.parallel(display, c.loadGen, c.loadGen, func(host string) ([]byte, error) {
-		session, err := newSSHSession("cockroach", c.host(c.loadGen))
+	c.parallel(display, c.loadGen, c.loadGen, func(i int) ([]byte, error) {
+		session, err := newSSHSession("cockroach", c.host(i))
 		if err != nil {
 			return nil, err
 		}
@@ -318,7 +308,7 @@ func (c *cluster) stopLoad() {
 	})
 }
 
-func (c *cluster) parallel(display string, from, to int, fn func(host string) ([]byte, error)) {
+func (c *cluster) parallel(display string, from, to int, fn func(i int) ([]byte, error)) {
 	type result struct {
 		index int
 		out   []byte
@@ -331,7 +321,7 @@ func (c *cluster) parallel(display string, from, to int, fn func(host string) ([
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			out, err := fn(c.host(i))
+			out, err := fn(i)
 			results <- result{i, out, err}
 		}(i)
 	}
@@ -360,11 +350,13 @@ func (c *cluster) parallel(display string, from, to int, fn func(host string) ([
 			}
 		}
 		fmt.Fprint(&writer, display)
+		var n int
 		for i := range complete {
 			if complete[i] {
-				fmt.Fprintf(&writer, " %d", i+from)
+				n++
 			}
 		}
+		fmt.Fprintf(&writer, " %d/%d", n, len(complete))
 		if !done {
 			fmt.Fprintf(&writer, " %s", spinner[spinnerIdx%len(spinner)])
 		}
