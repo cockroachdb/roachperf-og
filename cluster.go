@@ -53,6 +53,11 @@ func (c *cluster) startNode(host, join string) ([]byte, error) {
 }
 
 func (c *cluster) start() {
+	// TODO(peter): provide a facility for setting cluster settings after
+	// starting the cluster. For example:
+	//
+	//   set cluster setting kv.allocator.stat_based_rebalancing.enabled = false
+	//   set cluster setting server.remote_debugging.mode = 'any'
 	display := fmt.Sprintf("%s: starting", c.name)
 	host1 := c.host(1)
 	c.parallel(display, 1, c.count, func(i int) ([]byte, error) {
@@ -199,7 +204,7 @@ func (c *cluster) runLoad(cmd string, stdout, stderr io.Writer) error {
 	} else {
 		url += "?sslmode=disable"
 	}
-	fmt.Println(cmd)
+	fmt.Fprintln(stdout, cmd)
 	return session.Run(cmd + " '" + url + "'")
 }
 

@@ -17,8 +17,9 @@ import (
 var duration time.Duration
 
 var tests = map[string]func(clusterName, dir string){
-	"kv_0":  kv0,
-	"kv_95": kv95,
+	"kv_0":    kv0,
+	"kv_95":   kv95,
+	"nightly": nightly,
 }
 
 var dirRE = regexp.MustCompile(`^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}_[0-9]{2}_[0-9]{2}\.([^.]+)\.`)
@@ -298,4 +299,71 @@ func kv0(clusterName, dir string) {
 
 func kv95(clusterName, dir string) {
 	kvTest(clusterName, "kv_95", dir, "./kv --read-percent=95 --splits=1000")
+}
+
+func nightly(clusterName, dir string) {
+	var existing *testMetadata
+	if dir != "" {
+		existing = &testMetadata{}
+		if err := loadJSON(filepath.Join(dir, "metadata"), existing); err != nil {
+			log.Fatal(err)
+		}
+		clusterName = existing.Cluster
+	}
+
+	cmds := []struct {
+		name string
+		cmd  string
+	}{
+		{"kv_0", "./kv --read-percent=0 --splits=1000 --concurrency=384 --duration=10m"},
+		{"kv_95", "./kv --read-percent=95 --splits=1000 --concurrency=384 --duration=10m"},
+		{"splits", "./kv --read-percent=0 --splits=100000 --concurrency=384 --max-ops=1"},
+	}
+
+	c := testCluster(clusterName)
+	m := testMetadata{
+		Bin:     cockroachVersion(c),
+		Cluster: c.name,
+		Nodes:   c.count,
+		Env:     c.env,
+		Test:    "nightly",
+	}
+	if existing == nil {
+		dir = testDir("nightly", m.Bin)
+		saveJSON(filepath.Join(dir, "metadata"), m)
+	} else {
+		if m.Bin != existing.Bin {
+			log.Fatalf("cockroach binary changed: %s != %s", m.Bin, existing.Bin)
+		}
+		m.Nodes = existing.Nodes
+		m.Env = existing.Env
+	}
+	fmt.Printf("%s: %s\n", c.name, dir)
+
+	for _, cmd := range cmds {
+		runName := fmt.Sprint(cmd.name)
+		if run, err := loadTestRun(dir, runName); err == nil && run != nil {
+			continue
+		}
+
+		err := func() error {
+			f, err := os.Create(filepath.Join(dir, runName))
+			if err != nil {
+				log.Fatal(err)
+			}
+			defer f.Close()
+			c.wipe()
+			c.start()
+			stdout := io.MultiWriter(f, os.Stdout)
+			stderr := io.MultiWriter(f, os.Stderr)
+			return c.runLoad(cmd.cmd, stdout, stderr)
+		}()
+		if err != nil {
+			if !isSigKill(err) {
+				fmt.Printf("%s\n", err)
+			}
+			break
+		}
+	}
+	c.stop()
 }
