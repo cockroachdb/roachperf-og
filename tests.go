@@ -317,7 +317,10 @@ func nightly(clusterName, dir string) {
 	}{
 		{"kv_0", "./kv --read-percent=0 --splits=1000 --concurrency=384 --duration=10m"},
 		{"kv_95", "./kv --read-percent=95 --splits=1000 --concurrency=384 --duration=10m"},
-		{"splits", "./kv --read-percent=0 --splits=100000 --concurrency=384 --max-ops=1"},
+		// TODO(tamird/petermattis): this configuration has been observed to hang
+		// indefinitely. Re-enable when it is more reliable.
+		//
+		// {"splits", "./kv --read-percent=0 --splits=100000 --concurrency=384 --max-ops=1"},
 	}
 
 	c := testCluster(clusterName)
