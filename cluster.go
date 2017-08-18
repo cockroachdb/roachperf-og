@@ -141,7 +141,13 @@ fi
 }
 
 func (c *cluster) run(args []string) {
-	display := fmt.Sprintf("%s: run %s", c.name, args[0])
+	cmd := strings.TrimSpace(strings.Join(args, " "))
+	short := cmd
+	if len(cmd) > 30 {
+		short = cmd[:27] + "..."
+	}
+
+	display := fmt.Sprintf("%s: %s", c.name, short)
 	results := make([]string, len(c.nodes))
 	c.parallel(display, len(c.nodes), func(i int) ([]byte, error) {
 		session, err := newSSHSession("cockroach", c.host(c.nodes[i]))
@@ -151,7 +157,7 @@ func (c *cluster) run(args []string) {
 		}
 		defer session.Close()
 
-		out, err := session.CombinedOutput(strings.Join(args, " "))
+		out, err := session.CombinedOutput(cmd)
 		var msg string
 		if err != nil {
 			msg = err.Error()
