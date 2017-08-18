@@ -71,7 +71,7 @@ const defaultHostFormat = "cockroach-%s-%04d.crdb.io"
 
 var clusters = map[string]clusterInfo{
 	"denim": {7, 7, defaultHostFormat},
-	"sky":   {128, 128, defaultHostFormat},
+	"sky":   {128, -1, defaultHostFormat},
 }
 
 func newCluster(name string) (*cluster, error) {

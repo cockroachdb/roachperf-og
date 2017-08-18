@@ -59,8 +59,18 @@ func (c *cluster) start() {
 	//   set cluster setting server.remote_debugging.mode = 'any'
 	display := fmt.Sprintf("%s: starting", c.name)
 	host1 := c.host(1)
-	c.parallel(display, len(c.nodes), func(i int) ([]byte, error) {
-		return c.startNode(c.host(c.nodes[i]), host1)
+	nodes := c.nodes
+	if c.loadGen != -1 {
+		var newNodes []int
+		for _, i := range nodes {
+			if i != c.loadGen {
+				newNodes = append(newNodes, i)
+			}
+		}
+		nodes = newNodes
+	}
+	c.parallel(display, len(nodes), func(i int) ([]byte, error) {
+		return c.startNode(c.host(nodes[i]), host1)
 	})
 }
 
@@ -249,6 +259,8 @@ func formatProgress(p float64) string {
 }
 
 func (c *cluster) put(src, dest string) {
+	// TODO(peter): Only put 10 nodes at a time. When a node completes, output a
+	// line indicating that.
 	fmt.Printf("%s: putting %s %s\n", c.name, src, dest)
 
 	type result struct {
