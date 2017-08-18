@@ -15,8 +15,7 @@ import (
 
 type cluster struct {
 	name       string
-	count      int
-	total      int
+	nodes      []int
 	loadGen    int
 	secure     bool
 	hostFormat string
@@ -60,15 +59,15 @@ func (c *cluster) start() {
 	//   set cluster setting server.remote_debugging.mode = 'any'
 	display := fmt.Sprintf("%s: starting", c.name)
 	host1 := c.host(1)
-	c.parallel(display, 1, c.count, func(i int) ([]byte, error) {
-		return c.startNode(c.host(i), host1)
+	c.parallel(display, len(c.nodes), func(i int) ([]byte, error) {
+		return c.startNode(c.host(c.nodes[i]), host1)
 	})
 }
 
 func (c *cluster) stop() {
 	display := fmt.Sprintf("%s: stopping", c.name)
-	c.parallel(display, 1, c.total, func(i int) ([]byte, error) {
-		session, err := newSSHSession("cockroach", c.host(i))
+	c.parallel(display, len(c.nodes), func(i int) ([]byte, error) {
+		session, err := newSSHSession("cockroach", c.host(c.nodes[i]))
 		if err != nil {
 			return nil, err
 		}
@@ -84,8 +83,8 @@ sudo kill -9 $(lsof -t -i :26257 -i :27183) 2>/dev/null || true ;
 
 func (c *cluster) wipe() {
 	display := fmt.Sprintf("%s: wiping", c.name)
-	c.parallel(display, 1, c.total, func(i int) ([]byte, error) {
-		session, err := newSSHSession("cockroach", c.host(i))
+	c.parallel(display, len(c.nodes), func(i int) ([]byte, error) {
+		session, err := newSSHSession("cockroach", c.host(c.nodes[i]))
 		if err != nil {
 			return nil, err
 		}
@@ -104,11 +103,11 @@ sudo find /home/cockroach/logs -type f -not -name supervisor.log -exec rm -f {} 
 
 func (c *cluster) status() {
 	display := fmt.Sprintf("%s: status", c.name)
-	results := make([]string, c.total)
-	c.parallel(display, 1, c.total, func(i int) ([]byte, error) {
-		session, err := newSSHSession("cockroach", c.host(i))
+	results := make([]string, len(c.nodes))
+	c.parallel(display, len(c.nodes), func(i int) ([]byte, error) {
+		session, err := newSSHSession("cockroach", c.host(c.nodes[i]))
 		if err != nil {
-			results[i-1] = err.Error()
+			results[i] = err.Error()
 			return nil, nil
 		}
 		defer session.Close()
@@ -132,22 +131,22 @@ fi
 				msg = "not running"
 			}
 		}
-		results[i-1] = msg
+		results[i] = msg
 		return nil, nil
 	})
 
 	for i, r := range results {
-		fmt.Printf("  %2d: %s\n", i+1, r)
+		fmt.Printf("  %2d: %s\n", c.nodes[i], r)
 	}
 }
 
 func (c *cluster) run(args []string) {
 	display := fmt.Sprintf("%s: run %s", c.name, args[0])
-	results := make([]string, c.total)
-	c.parallel(display, 1, c.total, func(i int) ([]byte, error) {
-		session, err := newSSHSession("cockroach", c.host(i))
+	results := make([]string, len(c.nodes))
+	c.parallel(display, len(c.nodes), func(i int) ([]byte, error) {
+		session, err := newSSHSession("cockroach", c.host(c.nodes[i]))
 		if err != nil {
-			results[i-1] = err.Error()
+			results[i] = err.Error()
 			return nil, nil
 		}
 		defer session.Close()
@@ -159,12 +158,12 @@ func (c *cluster) run(args []string) {
 		} else {
 			msg = strings.TrimSpace(string(out))
 		}
-		results[i-1] = msg
+		results[i] = msg
 		return nil, nil
 	})
 
 	for i, r := range results {
-		fmt.Printf("  %2d: %s\n", i+1, r)
+		fmt.Printf("  %2d: %s\n", c.nodes[i], r)
 	}
 }
 
@@ -173,8 +172,8 @@ func (c *cluster) cockroachVersions() map[string]int {
 	var mu sync.Mutex
 
 	display := fmt.Sprintf("%s: cockroach version", c.name)
-	c.parallel(display, 1, c.count, func(i int) ([]byte, error) {
-		session, err := newSSHSession("cockroach", c.host(i))
+	c.parallel(display, len(c.nodes), func(i int) ([]byte, error) {
+		session, err := newSSHSession("cockroach", c.host(c.nodes[i]))
 		if err != nil {
 			return nil, err
 		}
@@ -252,22 +251,22 @@ func (c *cluster) put(src, dest string) {
 	}
 
 	var writer uiWriter
-	results := make(chan result, c.total)
-	lines := make([]string, c.total)
+	results := make(chan result, len(c.nodes))
+	lines := make([]string, len(c.nodes))
 	var linesMu sync.Mutex
 
 	var wg sync.WaitGroup
-	for i := 1; i <= c.total; i++ {
+	for i := range c.nodes {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			session, err := newSSHSession("cockroach", c.host(i))
+			session, err := newSSHSession("cockroach", c.host(c.nodes[i]))
 			if err == nil {
 				defer session.Close()
 				err = scp(src, dest, func(p float64) {
 					linesMu.Lock()
 					defer linesMu.Unlock()
-					lines[i-1] = formatProgress(p)
+					lines[i] = formatProgress(p)
 				}, session)
 			}
 			results <- result{i, err}
@@ -295,16 +294,16 @@ func (c *cluster) put(src, dest string) {
 				linesMu.Lock()
 				if r.err != nil {
 					haveErr = true
-					lines[r.index-1] = r.err.Error()
+					lines[r.index] = r.err.Error()
 				} else {
-					lines[r.index-1] = "done"
+					lines[r.index] = "done"
 				}
 				linesMu.Unlock()
 			}
 		}
 		linesMu.Lock()
 		for i := range lines {
-			fmt.Fprintf(&writer, "  %2d: ", i+1)
+			fmt.Fprintf(&writer, "  %2d: ", c.nodes[i])
 			if lines[i] != "" {
 				fmt.Fprintf(&writer, "%s", lines[i])
 			} else {
@@ -328,8 +327,8 @@ func (c *cluster) stopLoad() {
 	}
 
 	display := fmt.Sprintf("%s: stopping load", c.name)
-	c.parallel(display, c.loadGen, c.loadGen, func(i int) ([]byte, error) {
-		session, err := newSSHSession("cockroach", c.host(i))
+	c.parallel(display, 1, func(i int) ([]byte, error) {
+		session, err := newSSHSession("cockroach", c.host(c.loadGen))
 		if err != nil {
 			return nil, err
 		}
@@ -340,16 +339,16 @@ func (c *cluster) stopLoad() {
 	})
 }
 
-func (c *cluster) parallel(display string, from, to int, fn func(i int) ([]byte, error)) {
+func (c *cluster) parallel(display string, count int, fn func(i int) ([]byte, error)) {
 	type result struct {
 		index int
 		out   []byte
 		err   error
 	}
 
-	results := make(chan result, 1+to-from)
+	results := make(chan result, count)
 	var wg sync.WaitGroup
-	for i := from; i <= to; i++ {
+	for i := 0; i < count; i++ {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
@@ -366,7 +365,7 @@ func (c *cluster) parallel(display string, from, to int, fn func(i int) ([]byte,
 	var writer uiWriter
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
-	complete := make([]bool, 1+to-from)
+	complete := make([]bool, count)
 	haveErr := false
 
 	var spinner = []string{"|", "/", "-", "\\"}
@@ -378,7 +377,7 @@ func (c *cluster) parallel(display string, from, to int, fn func(i int) ([]byte,
 		case r, ok := <-results:
 			done = !ok
 			if ok {
-				complete[r.index-from] = true
+				complete[r.index] = true
 			}
 		}
 		fmt.Fprint(&writer, display)

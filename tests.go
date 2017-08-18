@@ -27,7 +27,7 @@ var dirRE = regexp.MustCompile(`^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}_[0-9]{2}_[0
 type testMetadata struct {
 	Bin     string
 	Cluster string
-	Nodes   int
+	Nodes   []int
 	Env     string
 	Test    string
 }
@@ -247,7 +247,7 @@ func kvTest(clusterName, testName, dir, cmd string) {
 	m := testMetadata{
 		Bin:     cockroachVersion(c),
 		Cluster: c.name,
-		Nodes:   c.count,
+		Nodes:   c.nodes,
 		Env:     c.env,
 		Test:    fmt.Sprintf("%s --duration=%s --concurrency=%%d", cmd, duration),
 	}
@@ -264,7 +264,7 @@ func kvTest(clusterName, testName, dir, cmd string) {
 	fmt.Printf("%s: %s\n", c.name, dir)
 
 	for i := 1; i <= 64; i++ {
-		concurrency := i * c.count
+		concurrency := i * len(c.nodes)
 		runName := fmt.Sprint(concurrency)
 		if run, err := loadTestRun(dir, runName); err == nil && run != nil {
 			continue
@@ -324,7 +324,7 @@ func nightly(clusterName, dir string) {
 	m := testMetadata{
 		Bin:     cockroachVersion(c),
 		Cluster: c.name,
-		Nodes:   c.count,
+		Nodes:   c.nodes,
 		Env:     c.env,
 		Test:    "nightly",
 	}

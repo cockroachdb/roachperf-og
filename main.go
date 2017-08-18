@@ -4,15 +4,60 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
 )
 
-var clusterNodes = 6
 var secure = false
 var env = "COCKROACH_ENABLE_RPC_COMPRESSION=false"
+
+func listNodes(s string, total int) ([]int, error) {
+	if s == "all" {
+		r := make([]int, total)
+		for i := range r {
+			r[i] = i + 1
+		}
+		return r, nil
+	}
+
+	m := map[int]bool{}
+	for _, p := range strings.Split(s, ",") {
+		parts := strings.Split(p, "-")
+		switch len(parts) {
+		case 1:
+			i, err := strconv.Atoi(parts[0])
+			if err != nil {
+				return nil, err
+			}
+			m[i] = true
+		case 2:
+			from, err := strconv.Atoi(parts[0])
+			if err != nil {
+				return nil, err
+			}
+			to, err := strconv.Atoi(parts[1])
+			if err != nil {
+				return nil, err
+			}
+			for i := from; i <= to; i++ {
+				m[i] = true
+			}
+		default:
+			return nil, fmt.Errorf("unable to parse nodes specification: %s", p)
+		}
+	}
+
+	r := make([]int, 0, len(m))
+	for i := range m {
+		r = append(r, i)
+	}
+	sort.Ints(r)
+	return r, nil
+}
 
 type clusterInfo struct {
 	total      int
@@ -28,30 +73,35 @@ var clusters = map[string]clusterInfo{
 }
 
 func isCluster(name string) bool {
-	_, ok := clusters[name]
+	parts := strings.Split(name, ":")
+	_, ok := clusters[parts[0]]
 	return ok
-}
-
-func clusterName(args []string) string {
-	name := os.Getenv("CLUSTER")
-	if len(args) >= 1 {
-		name = args[0]
-	}
-	return name
 }
 
 func newCluster(name string) (*cluster, error) {
 	if name == "" {
 		return nil, fmt.Errorf("no cluster specified")
 	}
+	parts := strings.Split(name, ":")
+	if len(parts) > 2 {
+		return nil, fmt.Errorf("invalid cluster name: %s", name)
+	}
+	name = parts[0]
 	info, ok := clusters[name]
 	if !ok {
 		return nil, fmt.Errorf("unknown cluster: %s", name)
 	}
+	nodesSpec := "all"
+	if len(parts) == 2 {
+		nodesSpec = parts[1]
+	}
+	nodes, err := listNodes(nodesSpec, info.total)
+	if err != nil {
+		return nil, err
+	}
 	return &cluster{
 		name:       name,
-		count:      clusterNodes,
-		total:      info.total,
+		nodes:      nodes,
 		loadGen:    info.loadGen,
 		secure:     secure,
 		hostFormat: info.hostFormat,
@@ -238,7 +288,7 @@ var putCmd = &cobra.Command{
 		if len(args) == 3 {
 			dest = args[2]
 		}
-		c, err := newCluster(clusterName(args))
+		c, err := newCluster(args[0])
 		if err != nil {
 			return err
 		}
@@ -260,8 +310,6 @@ func main() {
 		wipeCmd,
 	)
 
-	rootCmd.PersistentFlags().IntVarP(
-		&clusterNodes, "nodes", "n", clusterNodes, "number of nodes in cluster")
 	rootCmd.PersistentFlags().BoolVar(
 		&secure, "secure", false, "use a secure cluster")
 	rootCmd.PersistentFlags().StringVarP(
