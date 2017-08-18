@@ -24,7 +24,7 @@ const defaultHostFormat = "cockroach-%s-%04d.crdb.io"
 
 var clusters = map[string]clusterInfo{
 	"denim": {7, 7, defaultHostFormat},
-	"sky":   {64, 64, defaultHostFormat},
+	"sky":   {128, 128, defaultHostFormat},
 }
 
 func isCluster(name string) bool {
@@ -73,7 +73,10 @@ var startCmd = &cobra.Command{
 	Short: "start a cluster",
 	Long:  ``,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		c, err := newCluster(clusterName(args))
+		if len(args) == 0 {
+			return fmt.Errorf("no cluster specified")
+		}
+		c, err := newCluster(args[0])
 		if err != nil {
 			return err
 		}
@@ -87,7 +90,10 @@ var stopCmd = &cobra.Command{
 	Short: "stop a cluster",
 	Long:  ``,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		c, err := newCluster(clusterName(args))
+		if len(args) == 0 {
+			return fmt.Errorf("no cluster specified")
+		}
+		c, err := newCluster(args[0])
 		if err != nil {
 			return err
 		}
@@ -101,7 +107,10 @@ var wipeCmd = &cobra.Command{
 	Short: "wipe a cluster",
 	Long:  ``,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		c, err := newCluster(clusterName(args))
+		if len(args) == 0 {
+			return fmt.Errorf("no cluster specified")
+		}
+		c, err := newCluster(args[0])
 		if err != nil {
 			return err
 		}
@@ -115,11 +124,34 @@ var statusCmd = &cobra.Command{
 	Short: "retrieve the status of a cluster",
 	Long:  ``,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		c, err := newCluster(clusterName(args))
+		if len(args) == 0 {
+			return fmt.Errorf("no cluster specified")
+		}
+		c, err := newCluster(args[0])
 		if err != nil {
 			return err
 		}
 		c.status()
+		return nil
+	},
+}
+
+var runCmd = &cobra.Command{
+	Use:   "run <cluster> <command> [args]",
+	Short: "run a command on every node in a cluster",
+	Long:  ``,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if len(args) == 0 {
+			return fmt.Errorf("no cluster specified")
+		}
+		if len(args) == 1 {
+			return fmt.Errorf("no command specified")
+		}
+		c, err := newCluster(args[0])
+		if err != nil {
+			return err
+		}
+		c.run(args[1:])
 		return nil
 	},
 }
@@ -150,11 +182,11 @@ restarting the test will fail.
 		if isTest(args[0]) {
 			return runTest(args[0], "")
 		}
-		clusterName := os.Getenv("CLUSTER")
-		if len(args) >= 1 && isCluster(args[0]) {
-			clusterName = args[0]
-			args = args[1:]
+		if len(args) == 0 {
+			return fmt.Errorf("no cluster specified")
 		}
+		clusterName := args[0]
+		args = args[1:]
 		if !isCluster(clusterName) {
 			return fmt.Errorf("unknown cluster: %s", clusterName)
 		}
@@ -219,6 +251,7 @@ func main() {
 	rootCmd.AddCommand(
 		dumpCmd,
 		putCmd,
+		runCmd,
 		startCmd,
 		statusCmd,
 		stopCmd,

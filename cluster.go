@@ -75,7 +75,7 @@ func (c *cluster) stop() {
 		defer session.Close()
 
 		const cmd = `
-sudo pkill -9 "cockroach|java|mongo" || true ;
+sudo pkill -9 "cockroach|java|mongo|kv|ycsb" || true ;
 sudo kill -9 $(lsof -t -i :26257 -i :27183) 2>/dev/null || true ;
 `
 		return session.CombinedOutput(cmd)
@@ -92,7 +92,7 @@ func (c *cluster) wipe() {
 		defer session.Close()
 
 		const cmd = `
-sudo pkill -9 "cockroach|java|mongo" || true ;
+sudo pkill -9 "cockroach|java|mongo|kv|ycsb" || true ;
 sudo kill -9 $(lsof -t -i :26257 -i :27183) 2>/dev/null || true ;
 sudo find /mnt/data* -maxdepth 1 -type f -exec rm -f {} \; ;
 sudo rm -fr /mnt/data*/{auxiliary,local,tmp,cassandra,cockroach,mongo-data} \; ;
@@ -131,6 +131,33 @@ fi
 			if msg == "" {
 				msg = "not running"
 			}
+		}
+		results[i-1] = msg
+		return nil, nil
+	})
+
+	for i, r := range results {
+		fmt.Printf("  %2d: %s\n", i+1, r)
+	}
+}
+
+func (c *cluster) run(args []string) {
+	display := fmt.Sprintf("%s: run %s", c.name, args[0])
+	results := make([]string, c.total)
+	c.parallel(display, 1, c.total, func(i int) ([]byte, error) {
+		session, err := newSSHSession("cockroach", c.host(i))
+		if err != nil {
+			results[i-1] = err.Error()
+			return nil, nil
+		}
+		defer session.Close()
+
+		out, err := session.CombinedOutput(strings.Join(args, " "))
+		var msg string
+		if err != nil {
+			msg = err.Error()
+		} else {
+			msg = strings.TrimSpace(string(out))
 		}
 		results[i-1] = msg
 		return nil, nil
