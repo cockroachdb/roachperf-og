@@ -173,7 +173,7 @@ var runCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		c.run(args)
+		_ = c.run(os.Stdout, c.nodes, args)
 		return nil
 	},
 }
@@ -318,15 +318,12 @@ will perform <command> on:
 			os.Exit(1)
 		}
 		clusterName = parts[0]
-		if _, ok := clusters[clusterName]; !ok {
-			fmt.Printf("unknown cluster: %s\n\n", clusterName)
-			rootCmd.Help()
-			os.Exit(1)
+		if _, ok := clusters[clusterName]; ok {
+			if len(parts) == 2 {
+				clusterNodes = parts[1]
+			}
+			args[0] = clusterName
 		}
-		if len(parts) == 2 {
-			clusterNodes = parts[1]
-		}
-		args[0] = clusterName
 	}
 
 	rootCmd.SetArgs(args)

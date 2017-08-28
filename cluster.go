@@ -26,6 +26,19 @@ func (c *cluster) host(index int) string {
 	return fmt.Sprintf(c.hostFormat, c.name, index)
 }
 
+func (c *cluster) cockroachNodes() []int {
+	if c.loadGen == -1 {
+		return c.nodes
+	}
+	newNodes := make([]int, 0, len(c.nodes))
+	for _, i := range c.nodes {
+		if i != c.loadGen {
+			newNodes = append(newNodes, i)
+		}
+	}
+	return newNodes
+}
+
 func (c *cluster) startNode(host, join string) ([]byte, error) {
 	session, err := newSSHSession("cockroach", host)
 	if err != nil {
@@ -42,6 +55,7 @@ func (c *cluster) startNode(host, join string) ([]byte, error) {
 	args = append(args, "--store=path=/mnt/data1/cockroach")
 	// args = append(args, "--log-dir=/home/cockroach/logs")
 	args = append(args, "--logtostderr")
+	args = append(args, "--log-dir=")
 	args = append(args, "--background")
 	if join != host {
 		args = append(args, "--join="+join)
@@ -52,26 +66,42 @@ func (c *cluster) startNode(host, join string) ([]byte, error) {
 }
 
 func (c *cluster) start() {
-	// TODO(peter): provide a facility for setting cluster settings after
-	// starting the cluster. For example:
-	//
-	//   set cluster setting kv.allocator.stat_based_rebalancing.enabled = false
-	//   set cluster setting server.remote_debugging.mode = 'any'
 	display := fmt.Sprintf("%s: starting", c.name)
 	host1 := c.host(1)
-	nodes := c.nodes
-	if c.loadGen != -1 {
-		var newNodes []int
-		for _, i := range nodes {
-			if i != c.loadGen {
-				newNodes = append(newNodes, i)
-			}
-		}
-		nodes = newNodes
-	}
+	nodes := c.cockroachNodes()
+	bootstrapped := false
 	c.parallel(display, len(nodes), func(i int) ([]byte, error) {
+		if nodes[i] == 1 {
+			bootstrapped = true
+		}
 		return c.startNode(c.host(nodes[i]), host1)
 	})
+
+	if bootstrapped {
+		var msg string
+		display = fmt.Sprintf("%s: initializing cluster settings", c.name)
+		c.parallel(display, 1, func(i int) ([]byte, error) {
+			session, err := newSSHSession("cockroach", c.host(1))
+			if err != nil {
+				return nil, err
+			}
+			defer session.Close()
+
+			cmd := `./cockroach sql --url '` + c.pgURL(26257) + `' -e "
+set cluster setting kv.allocator.stat_based_rebalancing.enabled = false;
+set cluster setting server.remote_debugging.mode = 'any';
+"`
+			out, err := session.CombinedOutput(cmd)
+			if err != nil {
+				msg = err.Error()
+			} else {
+				msg = strings.TrimSpace(string(out))
+			}
+			return nil, nil
+		})
+
+		fmt.Println(msg)
+	}
 }
 
 func (c *cluster) stop() {
@@ -150,7 +180,7 @@ fi
 	}
 }
 
-func (c *cluster) run(args []string) {
+func (c *cluster) run(w io.Writer, nodes []int, args []string) error {
 	cmd := strings.TrimSpace(strings.Join(args, " "))
 	short := cmd
 	if len(cmd) > 30 {
@@ -158,9 +188,10 @@ func (c *cluster) run(args []string) {
 	}
 
 	display := fmt.Sprintf("%s: %s", c.name, short)
-	results := make([]string, len(c.nodes))
-	c.parallel(display, len(c.nodes), func(i int) ([]byte, error) {
-		session, err := newSSHSession("cockroach", c.host(c.nodes[i]))
+	errors := make([]error, len(nodes))
+	results := make([]string, len(nodes))
+	c.parallel(display, len(nodes), func(i int) ([]byte, error) {
+		session, err := newSSHSession("cockroach", c.host(nodes[i]))
 		if err != nil {
 			results[i] = err.Error()
 			return nil, nil
@@ -168,19 +199,25 @@ func (c *cluster) run(args []string) {
 		defer session.Close()
 
 		out, err := session.CombinedOutput(cmd)
-		var msg string
+		msg := strings.TrimSpace(string(out))
 		if err != nil {
-			msg = err.Error()
-		} else {
-			msg = strings.TrimSpace(string(out))
+			errors[i] = err
+			msg += fmt.Sprintf("\n%v", err)
 		}
 		results[i] = msg
 		return nil, nil
 	})
 
 	for i, r := range results {
-		fmt.Printf("  %2d: %s\n", c.nodes[i], r)
+		fmt.Fprintf(w, "  %2d: %s\n", nodes[i], r)
 	}
+
+	for _, err := range errors {
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (c *cluster) cockroachVersions() map[string]int {
@@ -238,16 +275,19 @@ func (c *cluster) runLoad(cmd string, stdout, stderr io.Writer) error {
 
 	session.Stdout = stdout
 	session.Stderr = stderr
-	url := "postgres://root@localhost:27183/test"
+	fmt.Fprintln(stdout, cmd)
+	return session.Run(cmd + " '" + c.pgURL(27183) + "'")
+}
+
+func (c *cluster) pgURL(port int) string {
+	url := fmt.Sprintf("postgres://root@localhost:%d", port)
 	if c.secure {
-		url += "?sslcert=%2Fhome%2Fcockroach%2Fcerts%2Fnode.crt&" +
-			"sslkey=%2Fhome%2Fcockroach%2Fcerts%2Fnode.key&sslmode=verify-full&" +
-			"sslrootcert=%2Fhome%2Fcockroach%2Fcerts%2Fca.crt"
+		url += "?sslcert=certs%2Fnode.crt&sslkey=certs%2Fnode.key&" +
+			"sslrootcert=certs%2Fca.crt&sslmode=verify-full"
 	} else {
 		url += "?sslmode=disable"
 	}
-	fmt.Fprintln(stdout, cmd)
-	return session.Run(cmd + " '" + url + "'")
+	return url
 }
 
 const progressDone = "=======================================>"

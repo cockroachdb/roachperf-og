@@ -20,6 +20,7 @@ var tests = map[string]func(clusterName, dir string){
 	"kv_0":    kv0,
 	"kv_95":   kv95,
 	"nightly": nightly,
+	"splits":  splits,
 }
 
 var dirRE = regexp.MustCompile(`^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}_[0-9]{2}_[0-9]{2}\.([^.]+)\.`)
@@ -263,8 +264,8 @@ func kvTest(clusterName, testName, dir, cmd string) {
 	}
 	fmt.Printf("%s: %s\n", c.name, dir)
 
-	for i := 1; i <= 64; i++ {
-		concurrency := i * len(c.nodes)
+	for i, n := 1, len(c.cockroachNodes()); i <= 64; i++ {
+		concurrency := i * n
 		runName := fmt.Sprint(concurrency)
 		if run, err := loadTestRun(dir, runName); err == nil && run != nil {
 			continue
@@ -360,6 +361,72 @@ func nightly(clusterName, dir string) {
 			stdout := io.MultiWriter(f, os.Stdout)
 			stderr := io.MultiWriter(f, os.Stderr)
 			return c.runLoad(cmd.cmd, stdout, stderr)
+		}()
+		if err != nil {
+			if !isSigKill(err) {
+				fmt.Printf("%s\n", err)
+			}
+			break
+		}
+	}
+	c.stop()
+}
+
+func splits(clusterName, dir string) {
+	var existing *testMetadata
+	if dir != "" {
+		existing = &testMetadata{}
+		if err := loadJSON(filepath.Join(dir, "metadata"), existing); err != nil {
+			log.Fatal(err)
+		}
+		clusterName = existing.Cluster
+	}
+
+	const cmd = "./kv --splits=500000 --concurrency=384 --max-ops=1"
+	c := testCluster(clusterName)
+	m := testMetadata{
+		Bin:     cockroachVersion(c),
+		Cluster: c.name,
+		Nodes:   c.nodes,
+		Env:     c.env,
+		Test:    "splits",
+	}
+	if existing == nil {
+		dir = testDir("splits", m.Bin)
+		saveJSON(filepath.Join(dir, "metadata"), m)
+	} else {
+		if m.Bin != existing.Bin {
+			log.Fatalf("cockroach binary changed: %s != %s", m.Bin, existing.Bin)
+		}
+		m.Nodes = existing.Nodes
+		m.Env = existing.Env
+	}
+	fmt.Printf("%s: %s\n", c.name, dir)
+
+	for i := 1; i <= 100; i++ {
+		runName := fmt.Sprint(i)
+		if run, err := loadTestRun(dir, runName); err == nil && run != nil {
+			continue
+		}
+
+		err := func() error {
+			f, err := os.Create(filepath.Join(dir, runName))
+			if err != nil {
+				log.Fatal(err)
+			}
+			defer f.Close()
+			c.wipe()
+			c.start()
+			stdout := io.MultiWriter(f, os.Stdout)
+			stderr := io.MultiWriter(f, os.Stderr)
+			if err := c.runLoad(cmd, stdout, stderr); err != nil {
+				return err
+			}
+			c.stop()
+			time.Sleep(5 * time.Second)
+
+			const metaCheck = `./cockroach debug meta-check /mnt/data1/cockroach`
+			return c.run(stdout, c.cockroachNodes(), []string{metaCheck})
 		}()
 		if err != nil {
 			if !isSigKill(err) {
