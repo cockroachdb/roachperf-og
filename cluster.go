@@ -20,6 +20,7 @@ type cluster struct {
 	secure     bool
 	hostFormat string
 	env        string
+	args       []string
 }
 
 func (c *cluster) host(index int) string {
@@ -60,6 +61,7 @@ func (c *cluster) startNode(host, join string) ([]byte, error) {
 	if join != host {
 		args = append(args, "--join="+join)
 	}
+	args = append(args, c.args...)
 	cmd := c.env + " ./cockroach start " + strings.Join(args, " ") +
 		"> logs/cockroach.stdout 2> logs/cockroach.stderr"
 	return session.CombinedOutput(cmd)

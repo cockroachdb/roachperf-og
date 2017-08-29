@@ -16,6 +16,7 @@ var clusterName string
 var clusterNodes = "all"
 var secure = false
 var env = "COCKROACH_ENABLE_RPC_COMPRESSION=false"
+var cockroachArgs []string
 
 func listNodes(s string, total int) ([]int, error) {
 	if s == "all" {
@@ -93,6 +94,7 @@ func newCluster(name string) (*cluster, error) {
 		secure:     secure,
 		hostFormat: info.hostFormat,
 		env:        env,
+		args:       cockroachArgs,
 	}, nil
 }
 
@@ -297,15 +299,17 @@ will perform <command> on:
 			testCmd,
 			wipeCmd,
 		)
+		cmd.PersistentFlags().BoolVar(
+			&secure, "secure", false, "use a secure cluster")
+		cmd.PersistentFlags().StringSliceVarP(
+			&cockroachArgs, "args", "a", nil, "cockroach node arguments")
+		cmd.PersistentFlags().StringVarP(
+			&env, "env", "e", env, "cockroach node environment variables")
 		rootCmd.AddCommand(cmd)
 	}
 
 	rootCmd.AddCommand(dumpCmd, webCmd)
 
-	rootCmd.PersistentFlags().BoolVar(
-		&secure, "secure", false, "use a secure cluster")
-	rootCmd.PersistentFlags().StringVarP(
-		&env, "env", "e", env, "cockroach node environment variables")
 	testCmd.PersistentFlags().DurationVarP(
 		&duration, "duration", "d", 5*time.Minute, "the duration to run each test")
 

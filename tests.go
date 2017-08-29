@@ -30,6 +30,7 @@ type testMetadata struct {
 	Cluster string
 	Nodes   []int
 	Env     string
+	Args    []string
 	Test    string
 }
 
@@ -242,6 +243,7 @@ func kvTest(clusterName, testName, dir, cmd string) {
 			log.Fatal(err)
 		}
 		clusterName = existing.Cluster
+		cockroachArgs = existing.Args
 	}
 
 	c := testCluster(clusterName)
@@ -250,6 +252,7 @@ func kvTest(clusterName, testName, dir, cmd string) {
 		Cluster: c.name,
 		Nodes:   c.nodes,
 		Env:     c.env,
+		Args:    c.args,
 		Test:    fmt.Sprintf("%s --duration=%s --concurrency=%%d", cmd, duration),
 	}
 	if existing == nil {
@@ -310,6 +313,7 @@ func nightly(clusterName, dir string) {
 			log.Fatal(err)
 		}
 		clusterName = existing.Cluster
+		cockroachArgs = existing.Args
 	}
 
 	cmds := []struct {
@@ -330,6 +334,7 @@ func nightly(clusterName, dir string) {
 		Cluster: c.name,
 		Nodes:   c.nodes,
 		Env:     c.env,
+		Args:    c.args,
 		Test:    "nightly",
 	}
 	if existing == nil {
@@ -380,6 +385,7 @@ func splits(clusterName, dir string) {
 			log.Fatal(err)
 		}
 		clusterName = existing.Cluster
+		cockroachArgs = existing.Args
 	}
 
 	const cmd = "./kv --splits=500000 --concurrency=384 --max-ops=1"
@@ -389,6 +395,7 @@ func splits(clusterName, dir string) {
 		Cluster: c.name,
 		Nodes:   c.nodes,
 		Env:     c.env,
+		Args:    c.args,
 		Test:    "splits",
 	}
 	if existing == nil {
