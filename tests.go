@@ -11,10 +11,12 @@ import (
 	"regexp"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 )
 
 var duration time.Duration
+var concurrency string
 
 var tests = map[string]func(clusterName, dir string){
 	"kv_0":    kv0,
@@ -235,6 +237,49 @@ func testDir(name, vers string) string {
 	return dir
 }
 
+func parseConcurrency(s string, numNodes int) (lo int, hi int, step int) {
+	// <lo>[-<hi>[/<step>]]
+	//
+	// If <step> is not specified, assuming numNodes. The <lo> and <hi> values
+	// are always multiplied by the number of nodes.
+
+	parts := strings.Split(s, "/")
+	switch len(parts) {
+	case 1:
+		step = numNodes
+	case 2:
+		var err error
+		step, err = strconv.Atoi(parts[1])
+		if err != nil {
+			log.Fatal(err)
+		}
+		s = parts[0]
+	}
+
+	parts = strings.Split(s, "-")
+	switch len(parts) {
+	case 1:
+		lo, err := strconv.Atoi(parts[0])
+		if err != nil {
+			log.Fatal(err)
+		}
+		return lo * numNodes, lo * numNodes, step
+	case 2:
+		lo, err := strconv.Atoi(parts[0])
+		if err != nil {
+			log.Fatal(err)
+		}
+		hi, err := strconv.Atoi(parts[1])
+		if err != nil {
+			log.Fatal(err)
+		}
+		return lo * numNodes, hi * numNodes, step
+	default:
+		log.Fatalf("unable to parse concurrency setting: %s", s)
+	}
+	return 0, 0, 0
+}
+
 func kvTest(clusterName, testName, dir, cmd string) {
 	var existing *testMetadata
 	if dir != "" {
@@ -267,8 +312,8 @@ func kvTest(clusterName, testName, dir, cmd string) {
 	}
 	fmt.Printf("%s: %s\n", c.name, dir)
 
-	for i, n := 1, len(c.cockroachNodes()); i <= 64; i++ {
-		concurrency := i * n
+	lo, hi, step := parseConcurrency(concurrency, len(c.cockroachNodes()))
+	for concurrency := lo; concurrency <= hi; concurrency += step {
 		runName := fmt.Sprint(concurrency)
 		if run, err := loadTestRun(dir, runName); err == nil && run != nil {
 			continue

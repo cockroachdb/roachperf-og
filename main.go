@@ -312,6 +312,8 @@ will perform <command> on:
 
 	testCmd.PersistentFlags().DurationVarP(
 		&duration, "duration", "d", 5*time.Minute, "the duration to run each test")
+	testCmd.PersistentFlags().StringVarP(
+		&concurrency, "concurrency", "c", "1-64", "the concurrency to run each test")
 
 	args := os.Args[1:]
 	if len(args) > 0 {
