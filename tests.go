@@ -172,7 +172,7 @@ func findTest(name string) (_ func(clusterName, dir string), dir string) {
 	if fn != nil {
 		return fn, ""
 	}
-	m := dirRE.FindStringSubmatch(name)
+	m := dirRE.FindStringSubmatch(filepath.Base(name))
 	if len(m) != 2 {
 		return nil, ""
 	}
