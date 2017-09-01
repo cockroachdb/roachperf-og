@@ -53,7 +53,7 @@ func (c *cluster) startNode(host, join string) ([]byte, error) {
 	} else {
 		args = append(args, "--insecure")
 	}
-	args = append(args, "--store=path=/mnt/data1/cockroach")
+	args = append(args, "--store=path=/mnt/data1")
 	// args = append(args, "--log-dir=/home/cockroach/logs")
 	args = append(args, "--logtostderr")
 	args = append(args, "--log-dir=")
