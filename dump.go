@@ -44,7 +44,7 @@ func dump2(d1, d2 *testData) error {
 		r1 := d1.runs[i]
 		r2 := d2.runs[i]
 		fmt.Printf("%6d %11.1f %11.1f %8.2f%%\n",
-			r1.concurrency, r1.opsSec, r2.opsSec, 100*(r1.opsSec-r2.opsSec)/r1.opsSec)
+			r1.concurrency, r1.opsSec, r2.opsSec, 100*(r2.opsSec-r1.opsSec)/r1.opsSec)
 	}
 	return nil
 }
