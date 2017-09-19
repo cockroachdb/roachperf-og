@@ -140,6 +140,10 @@ func (d *testData) get(concurrency int) *testRun {
 }
 
 func alignTestData(d1, d2 *testData) (*testData, *testData) {
+	if len(d1.runs) == 0 || len(d2.runs) == 0 {
+		return &testData{metadata: d1.metadata}, &testData{metadata: d2.metadata}
+	}
+
 	minConcurrency := d1.runs[0].concurrency
 	if c := d2.runs[0].concurrency; minConcurrency < c {
 		minConcurrency = c
