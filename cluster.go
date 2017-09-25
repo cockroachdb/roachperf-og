@@ -227,8 +227,9 @@ func (c *cluster) cockroachVersions() map[string]int {
 	var mu sync.Mutex
 
 	display := fmt.Sprintf("%s: cockroach version", c.name)
-	c.parallel(display, len(c.nodes), func(i int) ([]byte, error) {
-		session, err := newSSHSession("cockroach", c.host(c.nodes[i]))
+	nodes := c.cockroachNodes()
+	c.parallel(display, len(nodes), func(i int) ([]byte, error) {
+		session, err := newSSHSession("cockroach", c.host(nodes[i]))
 		if err != nil {
 			return nil, err
 		}
