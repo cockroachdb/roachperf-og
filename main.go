@@ -1,3 +1,21 @@
+// TODO:
+//
+// * Copy the binary into the test output directory. Automatically re-upload if
+//   the version doesn't match.
+//
+// * Ease the creation of test metadata and then running a series of tests
+//   using `roachperf <cluster> test <dir1> <dir2> ...`. Perhaps something like
+//   `cockroach prepare <test> <binary>`.
+//
+// * Automatically detect stalled tests and restart tests upon unexpected
+//   failures. Detection of stalled tests could be done by noticing zero output
+//   for a period of time.
+//
+// * Detect crashed cockroach nodes.
+//
+// * Configure and run haproxy. (Assume it is already installed). This can be
+//   done by running "cockroach gen haproxy" after the cluster is started.
+
 package main
 
 import (
