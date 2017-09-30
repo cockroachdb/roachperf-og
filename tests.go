@@ -25,7 +25,7 @@ var tests = map[string]func(clusterName, dir string){
 	"splits":  splits,
 }
 
-var dirRE = regexp.MustCompile(`^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}_[0-9]{2}_[0-9]{2}\.([^.]+)\.`)
+var dirRE = regexp.MustCompile(`([^.]+)\.`)
 
 type testMetadata struct {
 	Bin     string
@@ -34,6 +34,7 @@ type testMetadata struct {
 	Env     string
 	Args    []string
 	Test    string
+	Date    string
 }
 
 type testRun struct {
@@ -234,7 +235,7 @@ func cockroachVersion(c *cluster) string {
 }
 
 func testDir(name, vers string) string {
-	dir := fmt.Sprintf("%s.%s.%s", time.Now().Format("2006-01-02T15_04_05"), name, vers)
+	dir := fmt.Sprintf("%s.%s", name, vers)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		log.Fatal(err)
 	}
@@ -303,6 +304,7 @@ func kvTest(clusterName, testName, dir, cmd string) {
 		Env:     c.env,
 		Args:    c.args,
 		Test:    fmt.Sprintf("%s --duration=%s --concurrency=%%d", cmd, duration),
+		Date:    time.Now().Format("2006-01-02T15_04_05"),
 	}
 	if existing == nil {
 		dir = testDir(testName, m.Bin)
@@ -385,6 +387,7 @@ func nightly(clusterName, dir string) {
 		Env:     c.env,
 		Args:    c.args,
 		Test:    "nightly",
+		Date:    time.Now().Format("2006-01-02T15_04_05"),
 	}
 	if existing == nil {
 		dir = testDir("nightly", m.Bin)
@@ -446,6 +449,7 @@ func splits(clusterName, dir string) {
 		Env:     c.env,
 		Args:    c.args,
 		Test:    "splits",
+		Date:    time.Now().Format("2006-01-02T15_04_05"),
 	}
 	if existing == nil {
 		dir = testDir("splits", m.Bin)
