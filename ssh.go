@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bufio"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -119,7 +121,7 @@ func (p *progressWriter) Write(b []byte) (int, error) {
 	return n, err
 }
 
-func scp(src, dest string, progress func(float64), session *ssh.Session) error {
+func scpPut(src, dest string, progress func(float64), session *ssh.Session) error {
 	f, err := os.Open(src)
 	if err != nil {
 		return err
@@ -129,17 +131,100 @@ func scp(src, dest string, progress func(float64), session *ssh.Session) error {
 	if err != nil {
 		return err
 	}
+
+	errCh := make(chan error, 1)
 	go func() {
-		w, _ := session.StdinPipe()
+		w, err := session.StdinPipe()
+		if err != nil {
+			errCh <- err
+			return
+		}
 		defer w.Close()
 		fmt.Fprintf(w, "C%#o %d %s\n", s.Mode().Perm(), s.Size(), path.Base(src))
 		p := &progressWriter{w, 0, s.Size(), progress}
-		io.Copy(p, f)
+		if _, err := io.Copy(p, f); err != nil {
+			errCh <- err
+			return
+		}
 		fmt.Fprint(w, "\x00")
+		close(errCh)
 	}()
-	cmd := fmt.Sprintf("rm -f %s ; scp -t %s", dest, dest)
-	if err := session.Run(cmd); err != nil {
+
+	err = session.Run(fmt.Sprintf("rm -f %s ; scp -t %s", dest, dest))
+	select {
+	case err := <-errCh:
+		return err
+	default:
 		return err
 	}
-	return nil
+}
+
+// TODO(peter): Support retrieving a directory.
+func scpGet(src, dest string, progress func(float64), session *ssh.Session) error {
+	errCh := make(chan error, 1)
+	go func() {
+		rp, err := session.StdoutPipe()
+		if err != nil {
+			errCh <- err
+			return
+		}
+		wp, err := session.StdinPipe()
+		if err != nil {
+			errCh <- err
+			return
+		}
+		defer wp.Close()
+
+		fmt.Fprint(wp, "\x00")
+
+		r := bufio.NewReader(rp)
+		line, _, err := r.ReadLine()
+		if err != nil {
+			errCh <- err
+			return
+		}
+
+		var mode uint32
+		var size int64
+		var name string
+		if n, err := fmt.Sscanf(string(line), "C%o %d %s", &mode, &size, &name); err != nil {
+			errCh <- err
+			return
+		} else if n != 3 {
+			errCh <- errors.New(string(line))
+			return
+		}
+		_ = name
+
+		f, err := os.Create(dest)
+		if err != nil {
+			errCh <- err
+			return
+		}
+		defer f.Close()
+
+		if err := f.Chmod(os.FileMode(mode)); err != nil {
+			errCh <- err
+			return
+		}
+
+		fmt.Fprint(wp, "\x00")
+
+		p := &progressWriter{f, 0, size, progress}
+		if _, err := io.Copy(p, io.LimitReader(r, size)); err != nil {
+			errCh <- err
+			return
+		}
+
+		fmt.Fprint(wp, "\x00")
+		close(errCh)
+	}()
+
+	err := session.Run(fmt.Sprintf("scp -qrf %s", src))
+	select {
+	case err := <-errCh:
+		return err
+	default:
+		return err
+	}
 }

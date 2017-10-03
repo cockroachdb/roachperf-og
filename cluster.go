@@ -324,7 +324,92 @@ func (c *cluster) put(src, dest string) {
 			session, err := newSSHSession("cockroach", c.host(c.nodes[i]))
 			if err == nil {
 				defer session.Close()
-				err = scp(src, dest, func(p float64) {
+				err = scpPut(src, dest, func(p float64) {
+					linesMu.Lock()
+					defer linesMu.Unlock()
+					lines[i] = formatProgress(p)
+				}, session)
+			}
+			results <- result{i, err}
+		}(i)
+	}
+
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+	haveErr := false
+
+	var spinner = []string{"|", "/", "-", "\\"}
+	spinnerIdx := 0
+
+	for done := false; !done; {
+		select {
+		case <-ticker.C:
+		case r, ok := <-results:
+			done = !ok
+			if ok {
+				linesMu.Lock()
+				if r.err != nil {
+					haveErr = true
+					lines[r.index] = r.err.Error()
+				} else {
+					lines[r.index] = "done"
+				}
+				linesMu.Unlock()
+			}
+		}
+		linesMu.Lock()
+		for i := range lines {
+			fmt.Fprintf(&writer, "  %2d: ", c.nodes[i])
+			if lines[i] != "" {
+				fmt.Fprintf(&writer, "%s", lines[i])
+			} else {
+				fmt.Fprintf(&writer, "%s", spinner[spinnerIdx%len(spinner)])
+			}
+			fmt.Fprintf(&writer, "\n")
+		}
+		linesMu.Unlock()
+		writer.Flush(os.Stdout)
+		spinnerIdx++
+	}
+
+	if haveErr {
+		log.Fatal("failed")
+	}
+}
+
+func (c *cluster) get(src, dest string) {
+	// TODO(peter): Only get 10 nodes at a time. When a node completes, output a
+	// line indicating that.
+	fmt.Printf("%s: getting %s %s\n", c.name, src, dest)
+
+	type result struct {
+		index int
+		err   error
+	}
+
+	var writer uiWriter
+	results := make(chan result, len(c.nodes))
+	lines := make([]string, len(c.nodes))
+	var linesMu sync.Mutex
+
+	var wg sync.WaitGroup
+	for i := range c.nodes {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			session, err := newSSHSession("cockroach", c.host(c.nodes[i]))
+			if err == nil {
+				defer session.Close()
+				dest := dest
+				if len(c.nodes) > 1 {
+					dest = fmt.Sprintf("%d.%s", c.nodes[i], dest)
+				}
+				err = scpGet(src, dest, func(p float64) {
 					linesMu.Lock()
 					defer linesMu.Unlock()
 					lines[i] = formatProgress(p)
