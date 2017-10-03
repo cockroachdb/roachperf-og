@@ -224,8 +224,12 @@ func testCluster(name string) *cluster {
 func cockroachVersion(c *cluster) string {
 	versions := c.cockroachVersions()
 	if len(versions) == 0 {
+		// TODO(peter): If we're running on existing test, rather than dying let
+		// the test upload the correct cockroach binary.
 		log.Fatalf("unable to determine cockroach version")
 	} else if len(versions) > 1 {
+		// TODO(peter): Rather than dying, allow the test to upload the version to
+		// run on each node.
 		log.Fatalf("mismatched cockroach versions: %v", versions)
 	}
 	for v := range versions {
@@ -285,6 +289,25 @@ func parseConcurrency(s string, numNodes int) (lo int, hi int, step int) {
 	return 0, 0, 0
 }
 
+func getBin(c *cluster, dir string) {
+	bin := filepath.Join(dir, "cockroach")
+	if _, err := os.Stat(bin); err == nil {
+		return
+	}
+	t := *c
+	t.nodes = t.nodes[:1]
+	t.get("./cockroach", bin)
+}
+
+func putBin(c *cluster, dir string) error {
+	bin := filepath.Join(dir, "cockroach")
+	if _, err := os.Stat(bin); err != nil {
+		return err
+	}
+	c.put(bin, "./cockroach")
+	return nil
+}
+
 func kvTest(clusterName, testName, dir, cmd string) {
 	var existing *testMetadata
 	if dir != "" {
@@ -311,12 +334,15 @@ func kvTest(clusterName, testName, dir, cmd string) {
 		saveJSON(filepath.Join(dir, "metadata"), m)
 	} else {
 		if m.Bin != existing.Bin {
-			log.Fatalf("cockroach binary changed: %s != %s", m.Bin, existing.Bin)
+			if err := putBin(c, dir); err != nil {
+				log.Fatalf("cockroach binary changed: %s != %s\n%s", m.Bin, existing.Bin, err)
+			}
 		}
 		m.Nodes = existing.Nodes
 		m.Env = existing.Env
 	}
 	fmt.Printf("%s: %s\n", c.name, dir)
+	getBin(c, dir)
 
 	lo, hi, step := parseConcurrency(concurrency, len(c.cockroachNodes()))
 	for concurrency := lo; concurrency <= hi; concurrency += step {
@@ -394,12 +420,15 @@ func nightly(clusterName, dir string) {
 		saveJSON(filepath.Join(dir, "metadata"), m)
 	} else {
 		if m.Bin != existing.Bin {
-			log.Fatalf("cockroach binary changed: %s != %s", m.Bin, existing.Bin)
+			if err := putBin(c, dir); err != nil {
+				log.Fatalf("cockroach binary changed: %s != %s\n%s", m.Bin, existing.Bin, err)
+			}
 		}
 		m.Nodes = existing.Nodes
 		m.Env = existing.Env
 	}
 	fmt.Printf("%s: %s\n", c.name, dir)
+	getBin(c, dir)
 
 	for _, cmd := range cmds {
 		runName := fmt.Sprint(cmd.name)
@@ -456,12 +485,15 @@ func splits(clusterName, dir string) {
 		saveJSON(filepath.Join(dir, "metadata"), m)
 	} else {
 		if m.Bin != existing.Bin {
-			log.Fatalf("cockroach binary changed: %s != %s", m.Bin, existing.Bin)
+			if err := putBin(c, dir); err != nil {
+				log.Fatalf("cockroach binary changed: %s != %s\n%s", m.Bin, existing.Bin, err)
+			}
 		}
 		m.Nodes = existing.Nodes
 		m.Env = existing.Env
 	}
 	fmt.Printf("%s: %s\n", c.name, dir)
+	getBin(c, dir)
 
 	for i := 1; i <= 100; i++ {
 		runName := fmt.Sprint(i)

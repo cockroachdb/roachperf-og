@@ -1,8 +1,5 @@
 // TODO:
 //
-// * Copy the binary into the test output directory. Automatically re-upload if
-//   the version doesn't match.
-//
 // * Ease the creation of test metadata and then running a series of tests
 //   using `roachperf <cluster> test <dir1> <dir2> ...`. Perhaps something like
 //   `cockroach prepare <test> <binary>`.
