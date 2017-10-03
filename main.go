@@ -196,11 +196,11 @@ var runCmd = &cobra.Command{
 }
 
 var testCmd = &cobra.Command{
-	Use:   "test <name>",
-	Short: "run a test on a cluster",
+	Use:   "test <name> [<name>]",
+	Short: "run one or more tests on a cluster",
 	Long: `
-Run a test on a cluster, placing results in a timestamped directory. The test
-<name> must be one of:
+
+Run one or more tests on a cluster. The test <name> must be one of:
 
 	` + strings.Join(allTests(), "\n\t") + `
 
@@ -210,15 +210,19 @@ directory of a previous test. For example:
 	roachperf denim test kv_0.cockroach-6151ae1
 
 will restart the kv_0 test on denim using the cockroach binary with the build
-tag 6151ae1. If the test, environment or cockroach build tag do not match,
-restarting the test will fail.
+tag 6151ae1.
 `,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if len(args) == 0 {
 			fmt.Printf("no test specified\n\n")
 			return cmd.Help()
 		}
-		return runTest(args[0], clusterName)
+		for _, arg := range args {
+			if err := runTest(arg, clusterName); err != nil {
+				return err
+			}
+		}
+		return nil
 	},
 }
 
