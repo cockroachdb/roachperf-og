@@ -226,6 +226,17 @@ tag 6151ae1.
 	},
 }
 
+var uploadCmd = &cobra.Command{
+	Use:   "upload <testdir> <backend>",
+	Short: "upload test data to a backend",
+	Long: `
+Upload the artifacts from a test. Currently supports s3 only as a backend.
+`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return upload(args)
+	},
+}
+
 var webCmd = &cobra.Command{
 	Use:   "web <testdir> [<testdir>]",
 	Short: "visualize and compare test output",
@@ -356,7 +367,7 @@ will perform <command> on:
 		rootCmd.AddCommand(cmd)
 	}
 
-	rootCmd.AddCommand(dumpCmd, webCmd)
+	rootCmd.AddCommand(dumpCmd, webCmd, uploadCmd)
 
 	testCmd.PersistentFlags().DurationVarP(
 		&duration, "duration", "d", 5*time.Minute, "the duration to run each test")
