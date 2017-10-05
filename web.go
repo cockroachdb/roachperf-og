@@ -183,6 +183,11 @@ const webHTMLBulk = `<html>
   </head>
     <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
     <script>
+      google.charts.load('current', {'packages':['corechart']});
+      google.charts.setOnLoadCallback(renderOverview);
+
+      var SUMMARY_CONCURRENCY = 384;
+
       var tests = [
       {{- range $j, $d := . }}{{ if $j }},{{ end }}
         {
@@ -214,6 +219,20 @@ const webHTMLBulk = `<html>
       {{- end }}
       ];
 
+      var summaryOptions = {
+        legend: { position: 'top', alignment: 'center', textStyle: {fontSize: 12}, maxLines: 5 },
+        crosshair: { trigger: 'both', opacity: 0.35 },
+        series: {
+          "0":{targetAxisIndex: 0, color:"#ff0000", lineDashStyle: []},
+          "1":{targetAxisIndex: 1, color:"#ff0000", lineDashStyle: [2, 2]},
+          "2":{targetAxisIndex: 1, color:"#ff0000", lineDashStyle: [4, 4]}
+        },
+        vAxes: {"0":{title:"ops/sec"}, "1":{title:"latency (ms)"}},
+        hAxis: {
+          title: "version",
+        },
+      };
+
       var oneTestOptions = {
         legend: { position: 'top', alignment: 'center', textStyle: {fontSize: 12}, maxLines: 5 },
         crosshair: { trigger: 'both', opacity: 0.35 },
@@ -244,6 +263,32 @@ const webHTMLBulk = `<html>
       };
 
       var compare = [];
+
+      function renderOverview() {
+        var summary = tests
+          .map(function (t) {
+            return {
+              bin: t.metadata.bin,
+              runs: t.runs.filter(function (r) { return r.concurrency === SUMMARY_CONCURRENCY; })
+            };
+          })
+          .filter(function (t) { return t.runs.length; })
+          .map(function (t) { return { bin: t.bin, run: t.runs[0] }; });
+
+        var test;
+
+        var source = [["version", "ops/sec", "avg latency", "99%-ile latency"]];
+        for (var i = 0; i < summary.length; i++) {
+          test = summary[i];
+          source.push([test.bin, test.run.opsSec, test.run.avgLat, test.run.p99Lat]);
+        }
+
+        var data = google.visualization.arrayToDataTable(source);
+        var chart = new google.visualization.LineChart(document.getElementById('chart'));
+        chart.draw(data, summaryOptions);
+
+        document.getElementById("label").innerHTML = 'overview';
+      }
 
       function renderChart(i) {
         var runs = tests[i].runs;
@@ -303,14 +348,13 @@ const webHTMLBulk = `<html>
 
         document.getElementById("label").innerHTML = bin1 + ' vs. ' + bin2;
       }
-
-      google.charts.load('current', {'packages':['corechart']});
     </script>
   <body>
     <h2>performance review</h2>
 	<p>Chart a single test by clicking "single".  Compare two by clicking "compare" on each.</p>
     <h3>available tests</h3>
     <ul>
+      <li><a href="#" onClick="renderOverview()">overview</a></li>
     {{- range $i, $e := . }}
       <li>
         {{ .Metadata.Bin }}
