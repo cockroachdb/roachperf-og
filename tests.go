@@ -38,15 +38,15 @@ type testMetadata struct {
 }
 
 type testRun struct {
-	concurrency int
-	elapsed     float64
-	errors      int64
-	ops         int64
-	opsSec      float64
-	avgLat      float64
-	p50Lat      float64
-	p95Lat      float64
-	p99Lat      float64
+	Concurrency int
+	Elapsed     float64
+	Errors      int64
+	Ops         int64
+	OpsSec      float64
+	AvgLat      float64
+	P50Lat      float64
+	P95Lat      float64
+	P99Lat      float64
 }
 
 func loadTestRun(dir, name string) (*testRun, error) {
@@ -54,7 +54,7 @@ func loadTestRun(dir, name string) (*testRun, error) {
 	if err != nil {
 		return nil, nil
 	}
-	r := &testRun{concurrency: n}
+	r := &testRun{Concurrency: n}
 
 	b, err := ioutil.ReadFile(filepath.Join(dir, name))
 	if err != nil {
@@ -69,7 +69,7 @@ func loadTestRun(dir, name string) (*testRun, error) {
 	b = b[i+len(header)+1:]
 
 	_, err = fmt.Fscanf(bytes.NewReader(b), " %fs %d %d %f %f %f %f %f",
-		&r.elapsed, &r.errors, &r.ops, &r.opsSec, &r.avgLat, &r.p50Lat, &r.p95Lat, &r.p99Lat)
+		&r.Elapsed, &r.Errors, &r.Ops, &r.OpsSec, &r.AvgLat, &r.P50Lat, &r.P95Lat, &r.P99Lat)
 	if err != nil {
 		return nil, err
 	}
@@ -77,13 +77,13 @@ func loadTestRun(dir, name string) (*testRun, error) {
 }
 
 type testData struct {
-	metadata testMetadata
-	runs     []*testRun
+	Metadata testMetadata
+	Runs     []*testRun
 }
 
 func loadTestData(dir string) (*testData, error) {
 	d := &testData{}
-	if err := loadJSON(filepath.Join(dir, "metadata"), &d.metadata); err != nil {
+	if err := loadJSON(filepath.Join(dir, "metadata"), &d.Metadata); err != nil {
 		return nil, err
 	}
 
@@ -98,59 +98,59 @@ func loadTestData(dir string) (*testData, error) {
 			return nil, err
 		}
 		if r != nil {
-			d.runs = append(d.runs, r)
+			d.Runs = append(d.Runs, r)
 		}
 	}
 
-	sort.Slice(d.runs, func(i, j int) bool {
-		return d.runs[i].concurrency < d.runs[j].concurrency
+	sort.Slice(d.Runs, func(i, j int) bool {
+		return d.Runs[i].Concurrency < d.Runs[j].Concurrency
 	})
 	return d, nil
 }
 
 func (d *testData) exists(concurrency int) bool {
-	i := sort.Search(len(d.runs), func(j int) bool {
-		return d.runs[j].concurrency >= concurrency
+	i := sort.Search(len(d.Runs), func(j int) bool {
+		return d.Runs[j].Concurrency >= concurrency
 	})
-	return i < len(d.runs) && d.runs[i].concurrency == concurrency
+	return i < len(d.Runs) && d.Runs[i].Concurrency == concurrency
 }
 
 func (d *testData) get(concurrency int) *testRun {
-	i := sort.Search(len(d.runs), func(j int) bool {
-		return d.runs[j].concurrency >= concurrency
+	i := sort.Search(len(d.Runs), func(j int) bool {
+		return d.Runs[j].Concurrency >= concurrency
 	})
-	if i+1 >= len(d.runs) {
-		return d.runs[len(d.runs)-1]
+	if i+1 >= len(d.Runs) {
+		return d.Runs[len(d.Runs)-1]
 	}
 	if i < 0 {
-		return d.runs[0]
+		return d.Runs[0]
 	}
-	a := d.runs[i]
-	b := d.runs[i+1]
-	t := float64(concurrency-a.concurrency) / float64(b.concurrency-a.concurrency)
+	a := d.Runs[i]
+	b := d.Runs[i+1]
+	t := float64(concurrency-a.Concurrency) / float64(b.Concurrency-a.Concurrency)
 	return &testRun{
-		concurrency: concurrency,
-		elapsed:     a.elapsed + float64(b.elapsed-a.elapsed)*t,
-		ops:         a.ops + int64(float64(b.ops-a.ops)*t),
-		opsSec:      a.opsSec + float64(b.opsSec-a.opsSec)*t,
-		avgLat:      a.avgLat + float64(b.avgLat-a.avgLat)*t,
-		p50Lat:      a.p50Lat + float64(b.p50Lat-a.p50Lat)*t,
-		p95Lat:      a.p95Lat + float64(b.p95Lat-a.p95Lat)*t,
-		p99Lat:      a.p99Lat + float64(b.p99Lat-a.p99Lat)*t,
+		Concurrency: concurrency,
+		Elapsed:     a.Elapsed + float64(b.Elapsed-a.Elapsed)*t,
+		Ops:         a.Ops + int64(float64(b.Ops-a.Ops)*t),
+		OpsSec:      a.OpsSec + float64(b.OpsSec-a.OpsSec)*t,
+		AvgLat:      a.AvgLat + float64(b.AvgLat-a.AvgLat)*t,
+		P50Lat:      a.P50Lat + float64(b.P50Lat-a.P50Lat)*t,
+		P95Lat:      a.P95Lat + float64(b.P95Lat-a.P95Lat)*t,
+		P99Lat:      a.P99Lat + float64(b.P99Lat-a.P99Lat)*t,
 	}
 }
 
 func alignTestData(d1, d2 *testData) (*testData, *testData) {
-	if len(d1.runs) == 0 || len(d2.runs) == 0 {
-		return &testData{metadata: d1.metadata}, &testData{metadata: d2.metadata}
+	if len(d1.Runs) == 0 || len(d2.Runs) == 0 {
+		return &testData{Metadata: d1.Metadata}, &testData{Metadata: d2.Metadata}
 	}
 
-	minConcurrency := d1.runs[0].concurrency
-	if c := d2.runs[0].concurrency; minConcurrency < c {
+	minConcurrency := d1.Runs[0].Concurrency
+	if c := d2.Runs[0].Concurrency; minConcurrency < c {
 		minConcurrency = c
 	}
-	maxConcurrency := d1.runs[len(d1.runs)-1].concurrency
-	if c := d2.runs[len(d2.runs)-1].concurrency; maxConcurrency > c {
+	maxConcurrency := d1.Runs[len(d1.Runs)-1].Concurrency
+	if c := d2.Runs[len(d2.Runs)-1].Concurrency; maxConcurrency > c {
 		maxConcurrency = c
 	}
 
@@ -165,12 +165,12 @@ func alignTestData(d1, d2 *testData) (*testData, *testData) {
 	}
 
 	d1 = &testData{
-		metadata: d1.metadata,
-		runs:     r1,
+		Metadata: d1.Metadata,
+		Runs:     r1,
 	}
 	d2 = &testData{
-		metadata: d2.metadata,
-		runs:     r2,
+		Metadata: d2.Metadata,
+		Runs:     r2,
 	}
 	return d1, d2
 }

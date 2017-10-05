@@ -66,9 +66,9 @@ func web1(d *testData) error {
 	data := []interface{}{
 		[]interface{}{"concurrency", "ops/sec", "avg latency", "99%-tile latency"},
 	}
-	for _, r := range d.runs {
+	for _, r := range d.Runs {
 		data = append(data, []interface{}{
-			r.concurrency, r.opsSec, r.avgLat, r.p99Lat,
+			r.Concurrency, r.OpsSec, r.AvgLat, r.P99Lat,
 		})
 	}
 
@@ -92,17 +92,17 @@ func web2(d1, d2 *testData) error {
 	data := []interface{}{
 		[]interface{}{
 			"concurrency",
-			fmt.Sprintf("ops/sec (%s)", d1.metadata.Bin),
-			fmt.Sprintf("99%%-lat (%s)", d1.metadata.Bin),
-			fmt.Sprintf("ops/sec (%s)", d2.metadata.Bin),
-			fmt.Sprintf("99%%-lat (%s)", d2.metadata.Bin),
+			fmt.Sprintf("ops/sec (%s)", d1.Metadata.Bin),
+			fmt.Sprintf("99%%-lat (%s)", d1.Metadata.Bin),
+			fmt.Sprintf("ops/sec (%s)", d2.Metadata.Bin),
+			fmt.Sprintf("99%%-lat (%s)", d2.Metadata.Bin),
 		},
 	}
-	for i := range d1.runs {
-		r1 := d1.runs[i]
-		r2 := d2.runs[i]
+	for i := range d1.Runs {
+		r1 := d1.Runs[i]
+		r2 := d2.Runs[i]
 		data = append(data, []interface{}{
-			r1.concurrency, r1.opsSec, r1.p99Lat, r2.opsSec, r2.p99Lat,
+			r1.Concurrency, r1.OpsSec, r1.P99Lat, r2.OpsSec, r2.P99Lat,
 		})
 	}
 
@@ -162,52 +162,7 @@ const webHTML = `<html>
 </html>
 `
 
-type runData struct {
-	Concurrency int
-	Elapsed     float64
-	Errors      int64
-	Ops         int64
-	OpsSec      float64
-	AvgLat      float64
-	P50Lat      float64
-	P95Lat      float64
-	P99Lat      float64
-}
-
-func encodeTestData(d *testData) map[string]interface{} {
-	data := []runData{}
-	for i := range d.runs {
-		r := d.runs[i]
-		data = append(data, runData{
-			r.concurrency,
-			r.elapsed,
-			r.errors,
-			r.ops,
-			r.opsSec,
-			r.avgLat,
-			r.p50Lat,
-			r.p95Lat,
-			r.p99Lat,
-		})
-	}
-
-	m := map[string]interface{}{
-		"runs":     data,
-		"metadata": d.metadata,
-	}
-	return m
-}
-
-func webBulk(ds []*testData) error {
-	data := make([]map[string]interface{}, len(ds))
-	for i, d := range ds {
-		data[i] = encodeTestData(d)
-	}
-
-	return webApplyBulk(data)
-}
-
-func webApplyBulk(m interface{}) error {
+func webBulk(m []*testData) error {
 	t, err := template.New("web").Parse(webHTMLBulk)
 	if err != nil {
 		return err
@@ -232,16 +187,16 @@ const webHTMLBulk = `<html>
       {{- range $j, $d := . }}{{ if $j }},{{ end }}
         {
           "metadata": {
-            "bin": {{ .metadata.Bin }},
-            "cluster": {{ .metadata.Cluster }},
-            "nodes": {{ .metadata.Nodes }},
-            "env": {{ .metadata.Env }},
-            "args": {{ .metadata.Args }},
-            "test": {{ .metadata.Test }},
-            "date": {{ .metadata.Date }}
+            "bin": {{ .Metadata.Bin }},
+            "cluster": {{ .Metadata.Cluster }},
+            "nodes": {{ .Metadata.Nodes }},
+            "env": {{ .Metadata.Env }},
+            "args": {{ .Metadata.Args }},
+            "test": {{ .Metadata.Test }},
+            "date": {{ .Metadata.Date }}
           },
           "runs": [
-          {{- range $i, $e := .runs }}{{ if $i }},{{ end }}
+          {{- range $i, $e := .Runs }}{{ if $i }},{{ end }}
             {
               "concurrency": {{ $e.Concurrency }},
               "elapsed": {{ $e.Elapsed }},
@@ -358,8 +313,8 @@ const webHTMLBulk = `<html>
     <ul>
     {{- range $i, $e := . }}
       <li>
-        {{ .metadata.Bin }}
-        {{- if .metadata.Date }} ({{ .metadata.Date }}){{ end }}
+        {{ .Metadata.Bin }}
+        {{- if .Metadata.Date }} ({{ .Metadata.Date }}){{ end }}
         - <a href="#" onClick="renderChart({{ $i }});">single</a>
         - <a href="#" onClick="compareChart({{ $i }});">compare</a>
       </li>
