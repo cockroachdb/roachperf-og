@@ -16,3 +16,4 @@ roachperf denim put ./cockroach ./cockroach
 
 cd artifacts
 roachperf denim test nightly
+roachperf upload $(ls)
