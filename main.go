@@ -77,40 +77,30 @@ func listNodes(s string, total int) ([]int, error) {
 	return r, nil
 }
 
-type clusterInfo struct {
-	total      int
-	loadGen    int
-	hostFormat string
-}
-
-const defaultHostFormat = "cockroach-%s-%04d.crdb.io"
-
-var clusters = map[string]clusterInfo{
-	"denim": {7, 7, defaultHostFormat},
-	"sky":   {128, -1, defaultHostFormat},
-}
+var clusters = map[string]*cluster{}
 
 func newCluster(name string) (*cluster, error) {
 	if name == "" {
 		return nil, fmt.Errorf("no cluster specified")
 	}
-	info, ok := clusters[name]
+	c, ok := clusters[name]
 	if !ok {
 		return nil, fmt.Errorf("unknown cluster: %s", name)
 	}
-	nodes, err := listNodes(clusterNodes, info.total)
+
+	nodes, err := listNodes(clusterNodes, len(c.vms))
 	if err != nil {
 		return nil, err
 	}
-	return &cluster{
-		name:       name,
-		nodes:      nodes,
-		loadGen:    info.loadGen,
-		secure:     secure,
-		hostFormat: info.hostFormat,
-		env:        env,
-		args:       cockroachArgs,
-	}, nil
+
+	c.nodes = nodes
+	// TODO(marc): make loadgen node configurable.
+	c.loadGen = len(c.vms) - 1
+	c.secure = secure
+	c.env = env
+	c.args = cockroachArgs
+
+	return c, nil
 }
 
 var rootCmd = &cobra.Command{
@@ -322,6 +312,11 @@ func sortedClusters() []string {
 func main() {
 	cobra.EnableCommandSorting = false
 
+	if err := loadClusters(); err != nil {
+		// We don't want to exit as we may be looking at the help message.
+		fmt.Printf("problem loading clusters: %s", err)
+	}
+
 	for i, n := range sortedClusters() {
 		var sep string
 		if i+1 == len(clusters) {
@@ -369,6 +364,8 @@ will perform <command> on:
 
 	rootCmd.AddCommand(dumpCmd, webCmd, uploadCmd)
 
+	rootCmd.PersistentFlags().BoolVar(
+		&insecureIgnoreHostKey, "insecure-ignore-host-key", true, "don't check ssh host keys")
 	testCmd.PersistentFlags().DurationVarP(
 		&duration, "duration", "d", 5*time.Minute, "the duration to run each test")
 	testCmd.PersistentFlags().StringVarP(

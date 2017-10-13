@@ -14,17 +14,24 @@ import (
 )
 
 type cluster struct {
-	name       string
-	nodes      []int
-	loadGen    int
-	secure     bool
-	hostFormat string
-	env        string
-	args       []string
+	// name, vms, users are populated at init time.
+	name  string
+	vms   []string
+	users []string
+	// all other fields are populated in newCluster.
+	nodes   []int
+	loadGen int
+	secure  bool
+	env     string
+	args    []string
 }
 
 func (c *cluster) host(index int) string {
-	return fmt.Sprintf(c.hostFormat, c.name, index)
+	return c.vms[index-1]
+}
+
+func (c *cluster) user(index int) string {
+	return c.users[index-1]
 }
 
 func (c *cluster) cockroachNodes() []int {
@@ -40,8 +47,8 @@ func (c *cluster) cockroachNodes() []int {
 	return newNodes
 }
 
-func (c *cluster) startNode(host, join string) ([]byte, error) {
-	session, err := newSSHSession("cockroach", host)
+func (c *cluster) startNode(host, user, join string) ([]byte, error) {
+	session, err := newSSHSession(user, host)
 	if err != nil {
 		return nil, err
 	}
@@ -76,14 +83,14 @@ func (c *cluster) start() {
 		if nodes[i] == 1 {
 			bootstrapped = true
 		}
-		return c.startNode(c.host(nodes[i]), host1)
+		return c.startNode(c.host(nodes[i]), c.user(nodes[i]), host1)
 	})
 
 	if bootstrapped {
 		var msg string
 		display = fmt.Sprintf("%s: initializing cluster settings", c.name)
 		c.parallel(display, 1, func(i int) ([]byte, error) {
-			session, err := newSSHSession("cockroach", c.host(1))
+			session, err := newSSHSession(c.user(1), c.host(1))
 			if err != nil {
 				return nil, err
 			}
@@ -109,7 +116,7 @@ set cluster setting server.remote_debugging.mode = 'any';
 func (c *cluster) stop() {
 	display := fmt.Sprintf("%s: stopping", c.name)
 	c.parallel(display, len(c.nodes), func(i int) ([]byte, error) {
-		session, err := newSSHSession("cockroach", c.host(c.nodes[i]))
+		session, err := newSSHSession(c.user(c.nodes[i]), c.host(c.nodes[i]))
 		if err != nil {
 			return nil, err
 		}
@@ -126,7 +133,7 @@ sudo kill -9 $(lsof -t -i :26257 -i :27183) 2>/dev/null || true ;
 func (c *cluster) wipe() {
 	display := fmt.Sprintf("%s: wiping", c.name)
 	c.parallel(display, len(c.nodes), func(i int) ([]byte, error) {
-		session, err := newSSHSession("cockroach", c.host(c.nodes[i]))
+		session, err := newSSHSession(c.user(c.nodes[i]), c.host(c.nodes[i]))
 		if err != nil {
 			return nil, err
 		}
@@ -147,7 +154,7 @@ func (c *cluster) status() {
 	display := fmt.Sprintf("%s: status", c.name)
 	results := make([]string, len(c.nodes))
 	c.parallel(display, len(c.nodes), func(i int) ([]byte, error) {
-		session, err := newSSHSession("cockroach", c.host(c.nodes[i]))
+		session, err := newSSHSession(c.user(c.nodes[i]), c.host(c.nodes[i]))
 		if err != nil {
 			results[i] = err.Error()
 			return nil, nil
@@ -193,7 +200,7 @@ func (c *cluster) run(w io.Writer, nodes []int, args []string) error {
 	errors := make([]error, len(nodes))
 	results := make([]string, len(nodes))
 	c.parallel(display, len(nodes), func(i int) ([]byte, error) {
-		session, err := newSSHSession("cockroach", c.host(nodes[i]))
+		session, err := newSSHSession(c.user(c.nodes[i]), c.host(nodes[i]))
 		if err != nil {
 			results[i] = err.Error()
 			return nil, nil
@@ -229,7 +236,7 @@ func (c *cluster) cockroachVersions() map[string]int {
 	display := fmt.Sprintf("%s: cockroach version", c.name)
 	nodes := c.cockroachNodes()
 	c.parallel(display, len(nodes), func(i int) ([]byte, error) {
-		session, err := newSSHSession("cockroach", c.host(nodes[i]))
+		session, err := newSSHSession(c.user(c.nodes[i]), c.host(nodes[i]))
 		if err != nil {
 			return nil, err
 		}
@@ -257,7 +264,7 @@ func (c *cluster) runLoad(cmd string, stdout, stderr io.Writer) error {
 		log.Fatalf("%s: no load generator node specified", c.name)
 	}
 
-	session, err := newSSHSession("cockroach", c.host(c.loadGen))
+	session, err := newSSHSession(c.user(c.loadGen), c.host(c.loadGen))
 	if err != nil {
 		return err
 	}
@@ -321,7 +328,7 @@ func (c *cluster) put(src, dest string) {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			session, err := newSSHSession("cockroach", c.host(c.nodes[i]))
+			session, err := newSSHSession(c.host(c.nodes[i]), c.host(c.nodes[i]))
 			if err == nil {
 				defer session.Close()
 				err = scpPut(src, dest, func(p float64) {
@@ -402,7 +409,7 @@ func (c *cluster) get(src, dest string) {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			session, err := newSSHSession("cockroach", c.host(c.nodes[i]))
+			session, err := newSSHSession(c.host(c.nodes[i]), c.host(c.nodes[i]))
 			if err == nil {
 				defer session.Close()
 				dest := dest
@@ -474,7 +481,7 @@ func (c *cluster) stopLoad() {
 
 	display := fmt.Sprintf("%s: stopping load", c.name)
 	c.parallel(display, 1, func(i int) ([]byte, error) {
-		session, err := newSSHSession("cockroach", c.host(c.loadGen))
+		session, err := newSSHSession(c.user(c.loadGen), c.host(c.loadGen))
 		if err != nil {
 			return nil, err
 		}

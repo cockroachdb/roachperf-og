@@ -20,13 +20,18 @@ import (
 
 var knownHosts ssh.HostKeyCallback
 var knownHostsOnce sync.Once
+var insecureIgnoreHostKey bool
 
 func getKnownHosts() ssh.HostKeyCallback {
 	knownHostsOnce.Do(func() {
 		var err error
-		knownHosts, err = knownhosts.New(filepath.Join(os.Getenv("HOME"), ".ssh", "known_hosts"))
-		if err != nil {
-			log.Fatal(err)
+		if insecureIgnoreHostKey {
+			knownHosts = ssh.InsecureIgnoreHostKey()
+		} else {
+			knownHosts, err = knownhosts.New(filepath.Join(os.Getenv("HOME"), ".ssh", "known_hosts"))
+			if err != nil {
+				log.Fatal(err)
+			}
 		}
 	})
 	return knownHosts
