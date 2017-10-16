@@ -70,7 +70,7 @@ func (c *cluster) startNode(host, user, join string) ([]byte, error) {
 	}
 	args = append(args, c.args...)
 	cmd := c.env + " ./cockroach start " + strings.Join(args, " ") +
-		"> logs/cockroach.stdout 2> logs/cockroach.stderr"
+		"> cockroach.stdout 2> cockroach.stderr"
 	return session.CombinedOutput(cmd)
 }
 

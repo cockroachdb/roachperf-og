@@ -94,8 +94,8 @@ func newCluster(name string) (*cluster, error) {
 	}
 
 	c.nodes = nodes
-	// TODO(marc): make loadgen node configurable.
-	c.loadGen = len(c.vms) - 1
+	// TODO(marc): make loadgen node configurable. For now, we always use the last ID (1-indexed).
+	c.loadGen = len(c.vms)
 	c.secure = secure
 	c.env = env
 	c.args = cockroachArgs
