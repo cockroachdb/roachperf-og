@@ -328,7 +328,7 @@ func (c *cluster) put(src, dest string) {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			session, err := newSSHSession(c.host(c.nodes[i]), c.host(c.nodes[i]))
+			session, err := newSSHSession(c.user(c.nodes[i]), c.host(c.nodes[i]))
 			if err == nil {
 				defer session.Close()
 				err = scpPut(src, dest, func(p float64) {
@@ -409,7 +409,7 @@ func (c *cluster) get(src, dest string) {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			session, err := newSSHSession(c.host(c.nodes[i]), c.host(c.nodes[i]))
+			session, err := newSSHSession(c.user(c.nodes[i]), c.host(c.nodes[i]))
 			if err == nil {
 				defer session.Close()
 				dest := dest
