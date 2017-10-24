@@ -61,10 +61,10 @@ func (c *cluster) startNode(host, user, join string) ([]byte, error) {
 		args = append(args, "--insecure")
 	}
 	args = append(args, "--store=path=/mnt/data1")
-	// args = append(args, "--log-dir=/home/cockroach/logs")
 	args = append(args, "--logtostderr")
 	args = append(args, "--log-dir=")
 	args = append(args, "--background")
+	args = append(args, "--cache=50%")
 	if join != host {
 		args = append(args, "--join="+join)
 	}
@@ -96,7 +96,7 @@ func (c *cluster) start() {
 			}
 			defer session.Close()
 
-			cmd := `./cockroach sql --url '` + c.pgURL(26257) + `' -e "
+			cmd := `./cockroach sql --url ` + c.pgURL("localhost") + ` -e "
 set cluster setting kv.allocator.stat_based_rebalancing.enabled = false;
 set cluster setting server.remote_debugging.mode = 'any';
 "`
@@ -141,7 +141,7 @@ func (c *cluster) wipe() {
 
 		const cmd = `
 sudo pkill -9 "cockroach|java|mongo|kv|ycsb" || true ;
-sudo kill -9 $(lsof -t -i :26257 -i :27183) 2>/dev/null || true ;
+sudo kill -9 $(lsof -t -i :26257) 2>/dev/null || true ;
 sudo find /mnt/data* -maxdepth 1 -type f -exec rm -f {} \; ;
 sudo rm -fr /mnt/data*/{auxiliary,local,tmp,cassandra,cockroach,mongo-data} \; ;
 sudo find /home/cockroach/logs -type f -not -name supervisor.log -exec rm -f {} \; ;
@@ -162,7 +162,7 @@ func (c *cluster) status() {
 		defer session.Close()
 
 		const cmd = `
-out=$(sudo lsof -i :26257 -i :27183 | awk '!/COMMAND/ {print $1, $2}' | sort | uniq);
+out=$(sudo lsof -i :26257 | awk '!/COMMAND/ {print $1, $2}' | sort | uniq);
 vers=$(./cockroach version 2>/dev/null | awk '/Build Tag:/ {print $NF}')
 if [ -n "${out}" -a -n "${vers}" ]; then
   echo ${out} | sed "s/cockroach/cockroach-${vers}/g"
@@ -286,17 +286,23 @@ func (c *cluster) runLoad(cmd string, stdout, stderr io.Writer) error {
 	session.Stdout = stdout
 	session.Stderr = stderr
 	fmt.Fprintln(stdout, cmd)
-	return session.Run(cmd + " '" + c.pgURL(27183) + "'")
+
+	var urls []string
+	for _, i := range c.cockroachNodes() {
+		urls = append(urls, c.pgURL(c.host(i)))
+	}
+	return session.Run("ulimit -n 16384; " + cmd + " " + strings.Join(urls, " "))
 }
 
-func (c *cluster) pgURL(port int) string {
-	url := fmt.Sprintf("postgres://root@localhost:%d", port)
+func (c *cluster) pgURL(host string) string {
+	url := fmt.Sprintf("'postgres://root@%s:26257", host)
 	if c.secure {
 		url += "?sslcert=certs%2Fnode.crt&sslkey=certs%2Fnode.key&" +
 			"sslrootcert=certs%2Fca.crt&sslmode=verify-full"
 	} else {
 		url += "?sslmode=disable"
 	}
+	url += "'"
 	return url
 }
 
@@ -487,7 +493,7 @@ func (c *cluster) stopLoad() {
 		}
 		defer session.Close()
 
-		const cmd = `sudo kill -9 $(lsof -t -i :27183) 2>/dev/null || true`
+		const cmd = `sudo kill -9 $(lsof -t -i :26257) 2>/dev/null || true`
 		return session.CombinedOutput(cmd)
 	})
 }
