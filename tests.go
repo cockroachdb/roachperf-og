@@ -157,7 +157,7 @@ func alignTestData(d1, d2 *testData) (*testData, *testData) {
 	var r1 []*testRun
 	var r2 []*testRun
 	for i := minConcurrency; i <= maxConcurrency; i++ {
-		if !d1.exists(i) && !d2.exists(i) {
+		if !d1.exists(i) || !d2.exists(i) {
 			continue
 		}
 		r1 = append(r1, d1.get(i))
