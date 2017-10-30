@@ -79,7 +79,7 @@ func listNodes(s string, total int) ([]int, error) {
 
 var clusters = map[string]*cluster{}
 
-func newCluster(name string) (*cluster, error) {
+func newCluster(name string, reserveLoadGen bool) (*cluster, error) {
 	if name == "" {
 		return nil, fmt.Errorf("no cluster specified")
 	}
@@ -94,8 +94,13 @@ func newCluster(name string) (*cluster, error) {
 	}
 
 	c.nodes = nodes
-	// TODO(marc): make loadgen node configurable. For now, we always use the last ID (1-indexed).
-	c.loadGen = len(c.vms)
+	if reserveLoadGen {
+		// TODO(marc): make loadgen node configurable. For now, we always use the
+		// last ID (1-indexed).
+		c.loadGen = len(c.vms)
+	} else {
+		c.loadGen = -1
+	}
 	c.secure = secure
 	c.env = env
 	c.args = cockroachArgs
@@ -117,7 +122,7 @@ var startCmd = &cobra.Command{
 	Short: "start a cluster",
 	Long:  ``,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		c, err := newCluster(clusterName)
+		c, err := newCluster(clusterName, false /* reserveLoadGen */)
 		if err != nil {
 			return err
 		}
@@ -131,7 +136,7 @@ var stopCmd = &cobra.Command{
 	Short: "stop a cluster",
 	Long:  ``,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		c, err := newCluster(clusterName)
+		c, err := newCluster(clusterName, false /* reserveLoadGen */)
 		if err != nil {
 			return err
 		}
@@ -145,7 +150,7 @@ var wipeCmd = &cobra.Command{
 	Short: "wipe a cluster",
 	Long:  ``,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		c, err := newCluster(clusterName)
+		c, err := newCluster(clusterName, false /* reserveLoadGen */)
 		if err != nil {
 			return err
 		}
@@ -159,7 +164,7 @@ var statusCmd = &cobra.Command{
 	Short: "retrieve the status of a cluster",
 	Long:  ``,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		c, err := newCluster(clusterName)
+		c, err := newCluster(clusterName, false /* reserveLoadGen */)
 		if err != nil {
 			return err
 		}
@@ -176,7 +181,7 @@ var runCmd = &cobra.Command{
 		if len(args) == 0 {
 			return fmt.Errorf("no command specified")
 		}
-		c, err := newCluster(clusterName)
+		c, err := newCluster(clusterName, false /* reserveLoadGen */)
 		if err != nil {
 			return err
 		}
@@ -263,7 +268,7 @@ var putCmd = &cobra.Command{
 		if len(args) == 2 {
 			dest = args[1]
 		}
-		c, err := newCluster(clusterName)
+		c, err := newCluster(clusterName, false /* reserveLoadGen */)
 		if err != nil {
 			return err
 		}
@@ -291,7 +296,7 @@ multiple nodes the destination file name will be prefixed with the node number.
 		if len(args) == 2 {
 			dest = args[1]
 		}
-		c, err := newCluster(clusterName)
+		c, err := newCluster(clusterName, false /* reserveLoadGen */)
 		if err != nil {
 			return err
 		}

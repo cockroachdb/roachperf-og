@@ -143,7 +143,7 @@ func (c *cluster) wipe() {
 sudo pkill -9 "cockroach|java|mongo|kv|ycsb" || true ;
 sudo kill -9 $(lsof -t -i :26257) 2>/dev/null || true ;
 sudo find /mnt/data* -maxdepth 1 -type f -exec rm -f {} \; ;
-sudo rm -fr /mnt/data*/{auxiliary,local,tmp,cassandra,cockroach,mongo-data} \; ;
+sudo rm -fr /mnt/data*/{auxiliary,local,tmp,cassandra,cockroach,cockroach-temp*,mongo-data} \; ;
 sudo find /home/cockroach/logs -type f -not -name supervisor.log -exec rm -f {} \; ;
 `
 		return session.CombinedOutput(cmd)

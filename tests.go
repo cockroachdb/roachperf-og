@@ -211,7 +211,7 @@ func allTests() []string {
 }
 
 func testCluster(name string) *cluster {
-	c, err := newCluster(name)
+	c, err := newCluster(name, true /* reserveLoadGen */)
 	if err != nil {
 		log.Fatal(err)
 	}
