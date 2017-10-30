@@ -29,9 +29,10 @@ import (
 
 var clusterName string
 var clusterNodes = "all"
+var clusterType = "cockroach"
 var secure = false
-var env = "COCKROACH_ENABLE_RPC_COMPRESSION=false"
-var cockroachArgs []string
+var nodeEnv = "COCKROACH_ENABLE_RPC_COMPRESSION=false"
+var nodeArgs []string
 
 func listNodes(s string, total int) ([]int, error) {
 	if s == "all" {
@@ -88,6 +89,15 @@ func newCluster(name string, reserveLoadGen bool) (*cluster, error) {
 		return nil, fmt.Errorf("unknown cluster: %s", name)
 	}
 
+	switch clusterType {
+	case "cockroach":
+		c.impl = cockroach{}
+	case "cassandra":
+		c.impl = cassandra{}
+	default:
+		return nil, fmt.Errorf("unknown cluster type: %s", clusterType)
+	}
+
 	nodes, err := listNodes(clusterNodes, len(c.vms))
 	if err != nil {
 		return nil, err
@@ -102,8 +112,8 @@ func newCluster(name string, reserveLoadGen bool) (*cluster, error) {
 		c.loadGen = -1
 	}
 	c.secure = secure
-	c.env = env
-	c.args = cockroachArgs
+	c.env = nodeEnv
+	c.args = nodeArgs
 
 	return c, nil
 }
@@ -361,9 +371,11 @@ will perform <command> on:
 		cmd.PersistentFlags().BoolVar(
 			&secure, "secure", false, "use a secure cluster")
 		cmd.PersistentFlags().StringSliceVarP(
-			&cockroachArgs, "args", "a", nil, "cockroach node arguments")
+			&nodeArgs, "args", "a", nil, "node arguments")
 		cmd.PersistentFlags().StringVarP(
-			&env, "env", "e", env, "cockroach node environment variables")
+			&nodeEnv, "env", "e", nodeEnv, "node environment variables")
+		cmd.PersistentFlags().StringVarP(
+			&clusterType, "type", "t", clusterType, `cluster type ("cockroach" or "cassandra")`)
 		rootCmd.AddCommand(cmd)
 	}
 

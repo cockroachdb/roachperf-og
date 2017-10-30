@@ -316,7 +316,7 @@ func kvTest(clusterName, testName, dir, cmd string) {
 			log.Fatal(err)
 		}
 		clusterName = existing.Cluster
-		cockroachArgs = existing.Args
+		nodeArgs = existing.Args
 	}
 
 	c := testCluster(clusterName)
@@ -344,7 +344,7 @@ func kvTest(clusterName, testName, dir, cmd string) {
 	fmt.Printf("%s: %s\n", c.name, dir)
 	getBin(c, dir)
 
-	lo, hi, step := parseConcurrency(concurrency, len(c.cockroachNodes()))
+	lo, hi, step := parseConcurrency(concurrency, len(c.serverNodes()))
 	for concurrency := lo; concurrency <= hi; concurrency += step {
 		runName := fmt.Sprint(concurrency)
 		if run, err := loadTestRun(dir, runName); err == nil && run != nil {
@@ -390,7 +390,7 @@ func nightly(clusterName, dir string) {
 			log.Fatal(err)
 		}
 		clusterName = existing.Cluster
-		cockroachArgs = existing.Args
+		nodeArgs = existing.Args
 	}
 
 	cmds := []struct {
@@ -466,7 +466,7 @@ func splits(clusterName, dir string) {
 			log.Fatal(err)
 		}
 		clusterName = existing.Cluster
-		cockroachArgs = existing.Args
+		nodeArgs = existing.Args
 	}
 
 	const cmd = "./kv --splits=500000 --concurrency=384 --max-ops=1"
@@ -518,7 +518,7 @@ func splits(clusterName, dir string) {
 			time.Sleep(5 * time.Second)
 
 			const metaCheck = `./cockroach debug meta-check /mnt/data1/cockroach`
-			return c.run(stdout, c.cockroachNodes(), []string{metaCheck})
+			return c.run(stdout, c.serverNodes(), []string{metaCheck})
 		}()
 		if err != nil {
 			if !isSigKill(err) {
