@@ -187,7 +187,7 @@ var runCmd = &cobra.Command{
 	Use:   "run <command> [args]",
 	Short: "run a command on the nodes in a cluster",
 	Long:  ``,
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(_ *cobra.Command, args []string) error {
 		if len(args) == 0 {
 			return fmt.Errorf("no command specified")
 		}
@@ -195,7 +195,14 @@ var runCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		_ = c.run(os.Stdout, c.nodes, args)
+
+		cmd := strings.TrimSpace(strings.Join(args, " "))
+		title := cmd
+		if len(title) > 30 {
+			title = title[:27] + "..."
+		}
+
+		_ = c.run(os.Stdout, c.nodes, title, cmd)
 		return nil
 	},
 }
@@ -239,6 +246,30 @@ Upload the artifacts from a test. Currently supports s3 only as a backend.
 `,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return upload(args)
+	},
+}
+
+var installCmd = &cobra.Command{
+	Use:   "install <software>",
+	Short: "install 3rd party software",
+	Long: `
+Install third party software. Currently available installation options
+are:
+
+  cassandra
+  mongodb
+  postgres
+  tools (fio, iftop, perf)
+`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if len(args) == 0 {
+			return fmt.Errorf("no software specified")
+		}
+		c, err := newCluster(clusterName, false /* reserveLoadGen */)
+		if err != nil {
+			return err
+		}
+		return install(c, args)
 	},
 }
 
@@ -367,6 +398,7 @@ will perform <command> on:
 			stopCmd,
 			testCmd,
 			wipeCmd,
+			installCmd,
 		)
 		cmd.PersistentFlags().BoolVar(
 			&secure, "secure", false, "use a secure cluster")

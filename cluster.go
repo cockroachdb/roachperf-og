@@ -148,19 +148,14 @@ fi
 	}
 }
 
-func (c *cluster) run(w io.Writer, nodes []int, args []string) error {
-	cmd := strings.TrimSpace(strings.Join(args, " "))
-	short := cmd
-	if len(cmd) > 30 {
-		short = cmd[:27] + "..."
-	}
-
-	display := fmt.Sprintf("%s: %s", c.name, short)
+func (c *cluster) run(w io.Writer, nodes []int, title, cmd string) error {
+	display := fmt.Sprintf("%s: %s", c.name, title)
 	errors := make([]error, len(nodes))
 	results := make([]string, len(nodes))
 	c.parallel(display, len(nodes), 0, func(i int) ([]byte, error) {
-		session, err := newSSHSession(c.user(c.nodes[i]), c.host(nodes[i]))
+		session, err := newSSHSession(c.user(nodes[i]), c.host(nodes[i]))
 		if err != nil {
+			errors[i] = err
 			results[i] = err.Error()
 			return nil, nil
 		}

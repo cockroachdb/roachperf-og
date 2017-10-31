@@ -515,10 +515,7 @@ func splits(clusterName, dir string) {
 				return err
 			}
 			c.stop()
-			time.Sleep(5 * time.Second)
-
-			const metaCheck = `./cockroach debug meta-check /mnt/data1/cockroach`
-			return c.run(stdout, c.serverNodes(), []string{metaCheck})
+			return nil
 		}()
 		if err != nil {
 			if !isSigKill(err) {

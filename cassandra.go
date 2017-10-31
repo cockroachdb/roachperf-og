@@ -10,10 +10,6 @@ import (
 	"time"
 )
 
-// TODO(peter): providing a facility for installing cassandra
-//   - sudo apt-get install openjdk-8-jre
-//   - download and untar cassandra binary distribution
-
 type cassandra struct{}
 
 func (cassandra) start(c *cluster) {
@@ -24,7 +20,7 @@ func (cassandra) start(c *cluster) {
 	c.put(yamlPath, "./cassandra.yaml")
 	_ = os.Remove(yamlPath)
 
-	display := fmt.Sprintf("%s: starting", c.name)
+	display := fmt.Sprintf("%s: starting cassandra (be patient)", c.name)
 	nodes := c.serverNodes()
 	c.parallel(display, len(nodes), 1, func(i int) ([]byte, error) {
 		host := c.host(nodes[i])
@@ -37,7 +33,7 @@ func (cassandra) start(c *cluster) {
 			}
 			defer session.Close()
 
-			cmd := c.env + ` cassandra/bin/cassandra` +
+			cmd := c.env + ` cassandra` +
 				` -Dcassandra.config=file://${PWD}/cassandra.yaml` +
 				` -Dcassandra.ring_delay_ms=3000` +
 				` > cassandra.stdout 2> cassandra.stderr`
