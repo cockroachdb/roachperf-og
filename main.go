@@ -29,9 +29,10 @@ import (
 
 var clusterName string
 var clusterNodes = "all"
+var clusterType = "cockroach"
 var secure = false
-var env = "COCKROACH_ENABLE_RPC_COMPRESSION=false"
-var cockroachArgs []string
+var nodeEnv = "COCKROACH_ENABLE_RPC_COMPRESSION=false"
+var nodeArgs []string
 
 func listNodes(s string, total int) ([]int, error) {
 	if s == "all" {
@@ -88,6 +89,15 @@ func newCluster(name string, reserveLoadGen bool) (*cluster, error) {
 		return nil, fmt.Errorf("unknown cluster: %s", name)
 	}
 
+	switch clusterType {
+	case "cockroach":
+		c.impl = cockroach{}
+	case "cassandra":
+		c.impl = cassandra{}
+	default:
+		return nil, fmt.Errorf("unknown cluster type: %s", clusterType)
+	}
+
 	nodes, err := listNodes(clusterNodes, len(c.vms))
 	if err != nil {
 		return nil, err
@@ -102,8 +112,8 @@ func newCluster(name string, reserveLoadGen bool) (*cluster, error) {
 		c.loadGen = -1
 	}
 	c.secure = secure
-	c.env = env
-	c.args = cockroachArgs
+	c.env = nodeEnv
+	c.args = nodeArgs
 
 	return c, nil
 }
@@ -177,7 +187,7 @@ var runCmd = &cobra.Command{
 	Use:   "run <command> [args]",
 	Short: "run a command on the nodes in a cluster",
 	Long:  ``,
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(_ *cobra.Command, args []string) error {
 		if len(args) == 0 {
 			return fmt.Errorf("no command specified")
 		}
@@ -185,7 +195,14 @@ var runCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		_ = c.run(os.Stdout, c.nodes, args)
+
+		cmd := strings.TrimSpace(strings.Join(args, " "))
+		title := cmd
+		if len(title) > 30 {
+			title = title[:27] + "..."
+		}
+
+		_ = c.run(os.Stdout, c.nodes, title, cmd)
 		return nil
 	},
 }
@@ -229,6 +246,30 @@ Upload the artifacts from a test. Currently supports s3 only as a backend.
 `,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return upload(args)
+	},
+}
+
+var installCmd = &cobra.Command{
+	Use:   "install <software>",
+	Short: "install 3rd party software",
+	Long: `
+Install third party software. Currently available installation options
+are:
+
+  cassandra
+  mongodb
+  postgres
+  tools (fio, iftop, perf)
+`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if len(args) == 0 {
+			return fmt.Errorf("no software specified")
+		}
+		c, err := newCluster(clusterName, false /* reserveLoadGen */)
+		if err != nil {
+			return err
+		}
+		return install(c, args)
 	},
 }
 
@@ -357,13 +398,16 @@ will perform <command> on:
 			stopCmd,
 			testCmd,
 			wipeCmd,
+			installCmd,
 		)
 		cmd.PersistentFlags().BoolVar(
 			&secure, "secure", false, "use a secure cluster")
 		cmd.PersistentFlags().StringSliceVarP(
-			&cockroachArgs, "args", "a", nil, "cockroach node arguments")
+			&nodeArgs, "args", "a", nil, "node arguments")
 		cmd.PersistentFlags().StringVarP(
-			&env, "env", "e", env, "cockroach node environment variables")
+			&nodeEnv, "env", "e", nodeEnv, "node environment variables")
+		cmd.PersistentFlags().StringVarP(
+			&clusterType, "type", "t", clusterType, `cluster type ("cockroach" or "cassandra")`)
 		rootCmd.AddCommand(cmd)
 	}
 

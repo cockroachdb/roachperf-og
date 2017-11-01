@@ -13,6 +13,11 @@ import (
 	"time"
 )
 
+type clusterImpl interface {
+	start(c *cluster)
+	nodeURL(c *cluster, host string) string
+}
+
 type cluster struct {
 	// name, vms, users are populated at init time.
 	name  string
@@ -24,6 +29,7 @@ type cluster struct {
 	secure  bool
 	env     string
 	args    []string
+	impl    clusterImpl
 }
 
 func (c *cluster) host(index int) string {
@@ -34,7 +40,7 @@ func (c *cluster) user(index int) string {
 	return c.users[index-1]
 }
 
-func (c *cluster) cockroachNodes() []int {
+func (c *cluster) serverNodes() []int {
 	if c.loadGen == -1 {
 		return c.nodes
 	}
@@ -47,75 +53,29 @@ func (c *cluster) cockroachNodes() []int {
 	return newNodes
 }
 
-func (c *cluster) startNode(host, user, join string) ([]byte, error) {
-	session, err := newSSHSession(user, host)
+// getInternalIP returns the internal IP address of the specified node.
+func (c *cluster) getInternalIP(index int) (string, error) {
+	session, err := newSSHSession(c.user(index), c.host(index))
 	if err != nil {
-		return nil, err
+		return "", nil
 	}
 	defer session.Close()
 
-	var args []string
-	if c.secure {
-		args = append(args, "--certs-dir=certs")
-	} else {
-		args = append(args, "--insecure")
+	cmd := `hostname --all-ip-addresses`
+	out, err := session.CombinedOutput(cmd)
+	if err != nil {
+		return "", nil
 	}
-	args = append(args, "--store=path=/mnt/data1")
-	args = append(args, "--logtostderr")
-	args = append(args, "--log-dir=")
-	args = append(args, "--background")
-	args = append(args, "--cache=50%")
-	if join != host {
-		args = append(args, "--join="+join)
-	}
-	args = append(args, c.args...)
-	cmd := c.env + " ./cockroach start " + strings.Join(args, " ") +
-		"> cockroach.stdout 2> cockroach.stderr"
-	return session.CombinedOutput(cmd)
+	return strings.TrimSpace(string(out)), nil
 }
 
 func (c *cluster) start() {
-	display := fmt.Sprintf("%s: starting", c.name)
-	host1 := c.host(1)
-	nodes := c.cockroachNodes()
-	bootstrapped := false
-	c.parallel(display, len(nodes), func(i int) ([]byte, error) {
-		if nodes[i] == 1 {
-			bootstrapped = true
-		}
-		return c.startNode(c.host(nodes[i]), c.user(nodes[i]), host1)
-	})
-
-	if bootstrapped {
-		var msg string
-		display = fmt.Sprintf("%s: initializing cluster settings", c.name)
-		c.parallel(display, 1, func(i int) ([]byte, error) {
-			session, err := newSSHSession(c.user(1), c.host(1))
-			if err != nil {
-				return nil, err
-			}
-			defer session.Close()
-
-			cmd := `./cockroach sql --url ` + c.pgURL("localhost") + ` -e "
-set cluster setting kv.allocator.stat_based_rebalancing.enabled = false;
-set cluster setting server.remote_debugging.mode = 'any';
-"`
-			out, err := session.CombinedOutput(cmd)
-			if err != nil {
-				msg = err.Error()
-			} else {
-				msg = strings.TrimSpace(string(out))
-			}
-			return nil, nil
-		})
-
-		fmt.Println(msg)
-	}
+	c.impl.start(c)
 }
 
 func (c *cluster) stop() {
 	display := fmt.Sprintf("%s: stopping", c.name)
-	c.parallel(display, len(c.nodes), func(i int) ([]byte, error) {
+	c.parallel(display, len(c.nodes), 0, func(i int) ([]byte, error) {
 		session, err := newSSHSession(c.user(c.nodes[i]), c.host(c.nodes[i]))
 		if err != nil {
 			return nil, err
@@ -124,7 +84,7 @@ func (c *cluster) stop() {
 
 		const cmd = `
 sudo pkill -9 "cockroach|java|mongo|kv|ycsb" || true ;
-sudo kill -9 $(lsof -t -i :26257 -i :27183) 2>/dev/null || true ;
+sudo kill -9 $(lsof -t -i :26257 -i :9042) 2>/dev/null || true ;
 `
 		return session.CombinedOutput(cmd)
 	})
@@ -132,7 +92,7 @@ sudo kill -9 $(lsof -t -i :26257 -i :27183) 2>/dev/null || true ;
 
 func (c *cluster) wipe() {
 	display := fmt.Sprintf("%s: wiping", c.name)
-	c.parallel(display, len(c.nodes), func(i int) ([]byte, error) {
+	c.parallel(display, len(c.nodes), 0, func(i int) ([]byte, error) {
 		session, err := newSSHSession(c.user(c.nodes[i]), c.host(c.nodes[i]))
 		if err != nil {
 			return nil, err
@@ -141,10 +101,9 @@ func (c *cluster) wipe() {
 
 		const cmd = `
 sudo pkill -9 "cockroach|java|mongo|kv|ycsb" || true ;
-sudo kill -9 $(lsof -t -i :26257) 2>/dev/null || true ;
+sudo kill -9 $(lsof -t -i :26257 -i :9042) 2>/dev/null || true ;
 sudo find /mnt/data* -maxdepth 1 -type f -exec rm -f {} \; ;
 sudo rm -fr /mnt/data*/{auxiliary,local,tmp,cassandra,cockroach,cockroach-temp*,mongo-data} \; ;
-sudo find /home/cockroach/logs -type f -not -name supervisor.log -exec rm -f {} \; ;
 `
 		return session.CombinedOutput(cmd)
 	})
@@ -153,7 +112,7 @@ sudo find /home/cockroach/logs -type f -not -name supervisor.log -exec rm -f {} 
 func (c *cluster) status() {
 	display := fmt.Sprintf("%s: status", c.name)
 	results := make([]string, len(c.nodes))
-	c.parallel(display, len(c.nodes), func(i int) ([]byte, error) {
+	c.parallel(display, len(c.nodes), 0, func(i int) ([]byte, error) {
 		session, err := newSSHSession(c.user(c.nodes[i]), c.host(c.nodes[i]))
 		if err != nil {
 			results[i] = err.Error()
@@ -162,7 +121,7 @@ func (c *cluster) status() {
 		defer session.Close()
 
 		const cmd = `
-out=$(sudo lsof -i :26257 | awk '!/COMMAND/ {print $1, $2}' | sort | uniq);
+out=$(lsof -i :26257 -i :9042 | awk '!/COMMAND/ {print $1, $2}' | sort | uniq);
 vers=$(./cockroach version 2>/dev/null | awk '/Build Tag:/ {print $NF}')
 if [ -n "${out}" -a -n "${vers}" ]; then
   echo ${out} | sed "s/cockroach/cockroach-${vers}/g"
@@ -189,19 +148,14 @@ fi
 	}
 }
 
-func (c *cluster) run(w io.Writer, nodes []int, args []string) error {
-	cmd := strings.TrimSpace(strings.Join(args, " "))
-	short := cmd
-	if len(cmd) > 30 {
-		short = cmd[:27] + "..."
-	}
-
-	display := fmt.Sprintf("%s: %s", c.name, short)
+func (c *cluster) run(w io.Writer, nodes []int, title, cmd string) error {
+	display := fmt.Sprintf("%s: %s", c.name, title)
 	errors := make([]error, len(nodes))
 	results := make([]string, len(nodes))
-	c.parallel(display, len(nodes), func(i int) ([]byte, error) {
-		session, err := newSSHSession(c.user(c.nodes[i]), c.host(nodes[i]))
+	c.parallel(display, len(nodes), 0, func(i int) ([]byte, error) {
+		session, err := newSSHSession(c.user(nodes[i]), c.host(nodes[i]))
 		if err != nil {
+			errors[i] = err
 			results[i] = err.Error()
 			return nil, nil
 		}
@@ -234,8 +188,8 @@ func (c *cluster) cockroachVersions() map[string]int {
 	var mu sync.Mutex
 
 	display := fmt.Sprintf("%s: cockroach version", c.name)
-	nodes := c.cockroachNodes()
-	c.parallel(display, len(nodes), func(i int) ([]byte, error) {
+	nodes := c.serverNodes()
+	c.parallel(display, len(nodes), 0, func(i int) ([]byte, error) {
 		session, err := newSSHSession(c.user(c.nodes[i]), c.host(nodes[i]))
 		if err != nil {
 			return nil, err
@@ -288,22 +242,10 @@ func (c *cluster) runLoad(cmd string, stdout, stderr io.Writer) error {
 	fmt.Fprintln(stdout, cmd)
 
 	var urls []string
-	for _, i := range c.cockroachNodes() {
-		urls = append(urls, c.pgURL(c.host(i)))
+	for _, i := range c.serverNodes() {
+		urls = append(urls, c.impl.nodeURL(c, c.host(i)))
 	}
 	return session.Run("ulimit -n 16384; " + cmd + " " + strings.Join(urls, " "))
-}
-
-func (c *cluster) pgURL(host string) string {
-	url := fmt.Sprintf("'postgres://root@%s:26257", host)
-	if c.secure {
-		url += "?sslcert=certs%2Fnode.crt&sslkey=certs%2Fnode.key&" +
-			"sslrootcert=certs%2Fca.crt&sslmode=verify-full"
-	} else {
-		url += "?sslmode=disable"
-	}
-	url += "'"
-	return url
 }
 
 const progressDone = "=======================================>"
@@ -486,7 +428,7 @@ func (c *cluster) stopLoad() {
 	}
 
 	display := fmt.Sprintf("%s: stopping load", c.name)
-	c.parallel(display, 1, func(i int) ([]byte, error) {
+	c.parallel(display, 1, 0, func(i int) ([]byte, error) {
 		session, err := newSSHSession(c.user(c.loadGen), c.host(c.loadGen))
 		if err != nil {
 			return nil, err
@@ -498,7 +440,11 @@ func (c *cluster) stopLoad() {
 	})
 }
 
-func (c *cluster) parallel(display string, count int, fn func(i int) ([]byte, error)) {
+func (c *cluster) parallel(display string, count, concurrency int, fn func(i int) ([]byte, error)) {
+	if concurrency == 0 || concurrency > count {
+		concurrency = count
+	}
+
 	type result struct {
 		index int
 		out   []byte
@@ -507,13 +453,20 @@ func (c *cluster) parallel(display string, count int, fn func(i int) ([]byte, er
 
 	results := make(chan result, count)
 	var wg sync.WaitGroup
-	for i := 0; i < count; i++ {
-		wg.Add(1)
+	wg.Add(count)
+
+	var index int
+	startNext := func() {
 		go func(i int) {
 			defer wg.Done()
 			out, err := fn(i)
 			results <- result{i, out, err}
-		}(i)
+		}(index)
+		index++
+	}
+
+	for index < concurrency {
+		startNext()
 	}
 
 	go func() {
@@ -537,6 +490,9 @@ func (c *cluster) parallel(display string, count int, fn func(i int) ([]byte, er
 			done = !ok
 			if ok {
 				complete[r.index] = true
+			}
+			if index < count {
+				startNext()
 			}
 		}
 		fmt.Fprint(&writer, display)
