@@ -51,7 +51,7 @@ func (cassandra) start(c *cluster) {
 				}
 				defer session.Close()
 
-				cmd := `nc -z localhost 9042`
+				cmd := `nc -z $(hostname) 9042`
 				if _, err := session.CombinedOutput(cmd); err != nil {
 					return false, nil
 				}

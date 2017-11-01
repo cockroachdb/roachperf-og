@@ -26,8 +26,8 @@ seed_provider:
 // Note: this is the default cassandra.yaml that ships with Cassandra
 // 3.11.1. Add overrides to cassandraDiffYAML instead of editing directly.
 //
-// The one edit below is to comment out listen_address. Apparently that config
-// cannot be cleared once set.
+// The two edits below are to comment out listen_address and
+// rpc_address. Apparently those configs cannot be cleared once set.
 const cassandraDefaultYAML = `# Cassandra storage config YAML
 
 # NOTE:
@@ -703,7 +703,7 @@ start_rpc: false
 # set broadcast_rpc_address to a value other than 0.0.0.0.
 #
 # For security reasons, you should not expose this port to the internet.  Firewall it if needed.
-rpc_address: localhost
+# rpc_address: localhost
 
 # Set rpc_address OR rpc_interface, not both. Interfaces must correspond
 # to a single address, IP aliasing is not supported.

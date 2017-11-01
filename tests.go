@@ -221,20 +221,30 @@ func testCluster(name string) *cluster {
 	return c
 }
 
-func cockroachVersion(c *cluster) string {
-	versions := c.cockroachVersions()
-	if len(versions) == 0 {
-		// TODO(peter): If we're running on existing test, rather than dying let
-		// the test upload the correct cockroach binary.
-		log.Fatalf("unable to determine cockroach version")
-	} else if len(versions) > 1 {
-		// TODO(peter): Rather than dying, allow the test to upload the version to
-		// run on each node.
-		log.Fatalf("mismatched cockroach versions: %v", versions)
+func clusterVersion(c *cluster) string {
+	switch clusterType {
+	case "cockroach":
+		versions := c.cockroachVersions()
+		if len(versions) == 0 {
+			// TODO(peter): If we're running on existing test, rather than dying let
+			// the test upload the correct cockroach binary.
+			log.Fatalf("unable to determine cockroach version")
+		} else if len(versions) > 1 {
+			// TODO(peter): Rather than dying, allow the test to upload the version to
+			// run on each node.
+			log.Fatalf("mismatched cockroach versions: %v", versions)
+		}
+		for v := range versions {
+			return "cockroach-" + v
+		}
+
+	case "cassandra":
+		return "cassandra"
+
+	default:
+		log.Fatalf("unsupported cluster type: %s", clusterType)
 	}
-	for v := range versions {
-		return "cockroach-" + v
-	}
+
 	panic("not reached")
 }
 
@@ -290,21 +300,25 @@ func parseConcurrency(s string, numNodes int) (lo int, hi int, step int) {
 }
 
 func getBin(c *cluster, dir string) {
-	bin := filepath.Join(dir, "cockroach")
-	if _, err := os.Stat(bin); err == nil {
-		return
+	if clusterType == "cockroach" {
+		bin := filepath.Join(dir, "cockroach")
+		if _, err := os.Stat(bin); err == nil {
+			return
+		}
+		t := *c
+		t.nodes = t.nodes[:1]
+		t.get("./cockroach", bin)
 	}
-	t := *c
-	t.nodes = t.nodes[:1]
-	t.get("./cockroach", bin)
 }
 
 func putBin(c *cluster, dir string) error {
-	bin := filepath.Join(dir, "cockroach")
-	if _, err := os.Stat(bin); err != nil {
-		return err
+	if clusterType == "cockroach" {
+		bin := filepath.Join(dir, "cockroach")
+		if _, err := os.Stat(bin); err != nil {
+			return err
+		}
+		c.put(bin, "./cockroach")
 	}
-	c.put(bin, "./cockroach")
 	return nil
 }
 
@@ -321,7 +335,7 @@ func kvTest(clusterName, testName, dir, cmd string) {
 
 	c := testCluster(clusterName)
 	m := testMetadata{
-		Bin:     cockroachVersion(c),
+		Bin:     clusterVersion(c),
 		Cluster: c.name,
 		Nodes:   c.nodes,
 		Env:     c.env,
@@ -335,7 +349,7 @@ func kvTest(clusterName, testName, dir, cmd string) {
 	} else {
 		if m.Bin != existing.Bin {
 			if err := putBin(c, dir); err != nil {
-				log.Fatalf("cockroach binary changed: %s != %s\n%s", m.Bin, existing.Bin, err)
+				log.Fatalf("binary changed: %s != %s\n%s", m.Bin, existing.Bin, err)
 			}
 		}
 		m.Nodes = existing.Nodes
@@ -407,7 +421,7 @@ func nightly(clusterName, dir string) {
 
 	c := testCluster(clusterName)
 	m := testMetadata{
-		Bin:     cockroachVersion(c),
+		Bin:     clusterVersion(c),
 		Cluster: c.name,
 		Nodes:   c.nodes,
 		Env:     c.env,
@@ -472,7 +486,7 @@ func splits(clusterName, dir string) {
 	const cmd = "./kv --splits=500000 --concurrency=384 --max-ops=1"
 	c := testCluster(clusterName)
 	m := testMetadata{
-		Bin:     cockroachVersion(c),
+		Bin:     clusterVersion(c),
 		Cluster: c.name,
 		Nodes:   c.nodes,
 		Env:     c.env,

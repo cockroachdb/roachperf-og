@@ -218,6 +218,15 @@ func (c *cluster) runLoad(cmd string, stdout, stderr io.Writer) error {
 		log.Fatalf("%s: no load generator node specified", c.name)
 	}
 
+	display := fmt.Sprintf("%s: retrieving IP addresses", c.name)
+	nodes := c.serverNodes()
+	ips := make([]string, len(nodes))
+	c.parallel(display, len(nodes), 0, func(i int) ([]byte, error) {
+		var err error
+		ips[i], err = c.getInternalIP(nodes[i])
+		return nil, err
+	})
+
 	session, err := newSSHSession(c.user(c.loadGen), c.host(c.loadGen))
 	if err != nil {
 		return err
@@ -242,8 +251,8 @@ func (c *cluster) runLoad(cmd string, stdout, stderr io.Writer) error {
 	fmt.Fprintln(stdout, cmd)
 
 	var urls []string
-	for _, i := range c.serverNodes() {
-		urls = append(urls, c.impl.nodeURL(c, c.host(i)))
+	for _, ip := range ips {
+		urls = append(urls, c.impl.nodeURL(c, ip))
 	}
 	return session.Run("ulimit -n 16384; " + cmd + " " + strings.Join(urls, " "))
 }
@@ -435,7 +444,7 @@ func (c *cluster) stopLoad() {
 		}
 		defer session.Close()
 
-		const cmd = `sudo kill -9 $(lsof -t -i :26257) 2>/dev/null || true`
+		const cmd = `sudo kill -9 $(lsof -t -i :26257 -i :9042) 2>/dev/null || true`
 		return session.CombinedOutput(cmd)
 	})
 }
