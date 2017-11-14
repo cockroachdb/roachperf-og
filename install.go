@@ -1,11 +1,20 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
-	"io/ioutil"
 )
 
 func install(c *cluster, args []string) error {
+	do := func(title, cmd string) error {
+		var buf bytes.Buffer
+		err := c.run(&buf, c.nodes, "installing "+title, cmd)
+		if err != nil {
+			fmt.Print(buf.String())
+		}
+		return err
+	}
+
 	for _, arg := range args {
 		switch arg {
 		case "cassandra":
@@ -17,7 +26,7 @@ sudo apt-get update;
 sudo apt-get install -y cassandra;
 sudo service cassandra stop;
 `
-			if err := c.run(ioutil.Discard, c.nodes, "installing cassandra", cmd); err != nil {
+			if err := do("cassandra", cmd); err != nil {
 				return err
 			}
 
@@ -29,16 +38,17 @@ sudo service cassandra stop;
 
 		case "tools":
 			cmd := `
+sudo apt-get update;
 sudo apt-get install -y \
   fio \
   iftop \
   iotop \
   sysstat \
   linux-tools-common \
-  linux-tools-4.13.0-16-generic \
-  linux-cloud-tools-4.13.0-16-generic;
+  linux-tools-4.10.0-35-generic \
+  linux-cloud-tools-4.10.0-35-generic;
 `
-			if err := c.run(ioutil.Discard, c.nodes, "installing tools", cmd); err != nil {
+			if err := do("tools", cmd); err != nil {
 				return err
 			}
 		}
