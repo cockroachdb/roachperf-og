@@ -21,6 +21,9 @@ var concurrency string
 var tests = map[string]func(clusterName, dir string){
 	"kv_0":    kv0,
 	"kv_95":   kv95,
+	"ycsb_a":  ycsbA,
+	"ycsb_b":  ycsbB,
+	"ycsb_c":  ycsbC,
 	"nightly": nightly,
 	"splits":  splits,
 }
@@ -394,6 +397,18 @@ func kv0(clusterName, dir string) {
 
 func kv95(clusterName, dir string) {
 	kvTest(clusterName, "kv_95", dir, "./kv --read-percent=95 --splits=1000")
+}
+
+func ycsbA(clusterName, dir string) {
+	kvTest(clusterName, "ycsb_a", dir, "./ycsb --workload=A --splits=1000 --cassandra-replication=3")
+}
+
+func ycsbB(clusterName, dir string) {
+	kvTest(clusterName, "ycsb_b", dir, "./ycsb --workload=B --splits=1000 --cassandra-replication=3")
+}
+
+func ycsbC(clusterName, dir string) {
+	kvTest(clusterName, "ycsb_c", dir, "./ycsb --workload=C --splits=1000 --cassandra-replication=3")
 }
 
 func nightly(clusterName, dir string) {

@@ -30,7 +30,7 @@ func dump1(d *testData) error {
 	fmt.Println(d.Metadata.Test)
 	fmt.Println("_____N_____ops/sec__avg(ms)__p50(ms)__p95(ms)__p99(ms)")
 	for _, r := range d.Runs {
-		fmt.Printf("%6d %10.1f %8.1f %8.1f %8.1f %8.1f\n", r.Concurrency,
+		fmt.Printf("%6d %11.1f %8.1f %8.1f %8.1f %8.1f\n", r.Concurrency,
 			r.OpsSec, r.AvgLat, r.P50Lat, r.P95Lat, r.P99Lat)
 	}
 	return nil
