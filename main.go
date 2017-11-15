@@ -33,6 +33,7 @@ var clusterType = "cockroach"
 var secure = false
 var nodeEnv = "COCKROACH_ENABLE_RPC_COMPRESSION=false"
 var nodeArgs []string
+var binary = "./cockroach"
 
 func listNodes(s string, total int) ([]int, error) {
 	if s == "all" {
@@ -415,6 +416,10 @@ will perform <command> on:
 
 	rootCmd.PersistentFlags().BoolVar(
 		&insecureIgnoreHostKey, "insecure-ignore-host-key", true, "don't check ssh host keys")
+	startCmd.PersistentFlags().StringVarP(
+		&binary, "binary", "b", "./cockroach", "the remote cockroach binary used to start a server")
+	testCmd.PersistentFlags().StringVarP(
+		&binary, "binary", "b", "./cockroach", "the remote cockroach binary used to start a server")
 	testCmd.PersistentFlags().DurationVarP(
 		&duration, "duration", "d", 5*time.Minute, "the duration to run each test")
 	testCmd.PersistentFlags().StringVarP(

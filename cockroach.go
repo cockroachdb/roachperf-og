@@ -32,11 +32,12 @@ func (r cockroach) start(c *cluster) {
 		args = append(args, "--log-dir=")
 		args = append(args, "--background")
 		args = append(args, "--cache=50%")
+		args = append(args, "--max-sql-memory=10%")
 		if join != host {
 			args = append(args, "--join="+join)
 		}
 		args = append(args, c.args...)
-		cmd := c.env + " ./cockroach start " + strings.Join(args, " ") +
+		cmd := c.env + " " + binary + " start " + strings.Join(args, " ") +
 			" > cockroach.stdout 2> cockroach.stderr"
 		return session.CombinedOutput(cmd)
 	})
