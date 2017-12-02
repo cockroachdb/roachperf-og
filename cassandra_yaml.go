@@ -5,6 +5,9 @@ commitlog_sync: batch
 commitlog_sync_batch_window_in_ms: 2
 commitlog_sync_period_in_ms: 0
 
+read_request_timeout_in_ms: 10000
+write_request_timeout_in_ms: 10000
+
 commitlog_directory: /mnt/data1/cassandra/commitlog
 data_file_directories:
     - /mnt/data1/cassandra/data
