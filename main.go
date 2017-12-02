@@ -347,6 +347,36 @@ multiple nodes the destination file name will be prefixed with the node number.
 	},
 }
 
+var pgurlCmd = &cobra.Command{
+	Use:   "pgurl",
+	Short: "generate pgurls for the nodes in a cluster",
+	Long: `
+Generate pgurls for the nodes in a cluster.
+`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		c, err := newCluster(clusterName, false /* reserveLoadGen */)
+		if err != nil {
+			return err
+		}
+
+		display := fmt.Sprintf("%s: retrieving IP addresses", c.name)
+		nodes := c.serverNodes()
+		ips := make([]string, len(nodes))
+		c.parallel(display, len(nodes), 0, func(i int) ([]byte, error) {
+			var err error
+			ips[i], err = c.getInternalIP(nodes[i])
+			return nil, err
+		})
+
+		var urls []string
+		for _, ip := range ips {
+			urls = append(urls, c.impl.nodeURL(c, ip))
+		}
+		fmt.Println(strings.Join(urls, " "))
+		return nil
+	},
+}
+
 func sortedClusters() []string {
 	var r []string
 	for n := range clusters {
@@ -399,6 +429,7 @@ will perform <command> on:
 			stopCmd,
 			testCmd,
 			wipeCmd,
+			pgurlCmd,
 			installCmd,
 		)
 		cmd.PersistentFlags().BoolVar(
