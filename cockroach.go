@@ -27,7 +27,7 @@ func (r cockroach) start(c *cluster) {
 		} else {
 			args = append(args, "--insecure")
 		}
-		args = append(args, "--store=path=/mnt/data1")
+		args = append(args, "--store=path=/mnt/data1/cockroach")
 		args = append(args, "--logtostderr")
 		args = append(args, "--log-dir=")
 		args = append(args, "--background")
