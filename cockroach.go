@@ -31,8 +31,8 @@ func (r cockroach) start(c *cluster) {
 		args = append(args, "--logtostderr")
 		args = append(args, "--log-dir=")
 		args = append(args, "--background")
-		args = append(args, "--cache=50%")
-		args = append(args, "--max-sql-memory=10%")
+		args = append(args, "--cache=25%")
+		args = append(args, "--max-sql-memory=25%")
 		if join != host {
 			args = append(args, "--join="+join)
 		}
