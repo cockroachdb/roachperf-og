@@ -1,5 +1,13 @@
 #!/bin/bash
 
+if [[ -z "${1}" ]]; then
+    echo "Test name not specified."
+    exit 1
+fi
+
+name=${1}
+shift
+
 cd ../../cockroachlabs/roachprod
 go install
 cd ../../cockroachdb/roachperf
@@ -16,7 +24,7 @@ echo $GOOGLE_CREDENTIALS > creds.json
 gcloud auth activate-service-account --key-file=creds.json
 
 # It might already exist.
-roachprod -u teamcity create nightly || roachprod sync
+roachprod -u teamcity "$@" create "${name}" || roachprod sync
 
 eval $(ssh-agent)
 ssh-add ~/.ssh/google_compute_engine
@@ -26,9 +34,9 @@ chmod +x cockroach
 curl -L https://edge-binaries.cockroachdb.com/loadgen/kv.LATEST -o kv
 chmod +x kv
 
-roachperf teamcity-nightly put ./cockroach ./cockroach
-roachperf teamcity-nightly put ./kv ./kv
+roachperf "teamcity-${name}" put ./cockroach ./cockroach
+roachperf "teamcity-${name}" put ./kv ./kv
 
 cd artifacts
-roachperf teamcity-nightly test nightly
+roachperf "teamcity-${name}" test nightly --duration 5s
 roachperf upload $(ls)
