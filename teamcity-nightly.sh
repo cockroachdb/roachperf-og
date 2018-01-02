@@ -10,4 +10,4 @@ docker run \
     --env="AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}" \
     --env="GOOGLE_CREDENTIALS=${GOOGLE_CREDENTIALS}" \
     --rm \
-    cockroachdb/builder:20171004-085709 ./run-nightly.sh
+    cockroachdb/builder:20171004-085709 ./run-nightly.sh "$@"

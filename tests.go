@@ -19,13 +19,14 @@ var duration time.Duration
 var concurrency string
 
 var tests = map[string]func(clusterName, dir string){
-	"kv_0":    kv0,
-	"kv_95":   kv95,
-	"ycsb_a":  ycsbA,
-	"ycsb_b":  ycsbB,
-	"ycsb_c":  ycsbC,
-	"nightly": nightly,
-	"splits":  splits,
+	"kv_0":       kv0,
+	"kv_95":      kv95,
+	"ycsb_a":     ycsbA,
+	"ycsb_b":     ycsbB,
+	"ycsb_c":     ycsbC,
+	"geonightly": geoNightly,
+	"nightly":    nightly,
+	"splits":     splits,
 }
 
 var dirRE = regexp.MustCompile(`([^.]+)\.`)
@@ -411,7 +412,15 @@ func ycsbC(clusterName, dir string) {
 	kvTest(clusterName, "ycsb_c", dir, "./ycsb --workload=C --splits=1000 --cassandra-replication=3")
 }
 
+func geoNightly(clusterName, dir string) {
+	generalNightly(clusterName, dir, "--duration=10h")
+}
+
 func nightly(clusterName, dir string) {
+	generalNightly(clusterName, dir, "--duration=10m")
+}
+
+func generalNightly(clusterName, dir string, extraArgs ...string) {
 	var existing *testMetadata
 	if dir != "" {
 		existing = &testMetadata{}
@@ -426,8 +435,8 @@ func nightly(clusterName, dir string) {
 		name string
 		cmd  string
 	}{
-		{"kv_0", "./kv --read-percent=0 --splits=1000 --concurrency=384 --duration=10m"},
-		{"kv_95", "./kv --read-percent=95 --splits=1000 --concurrency=384 --duration=10m"},
+		{"kv_0", "./kv --read-percent=0 --splits=1000 --concurrency=384 " + strings.Join(extraArgs, " ")},
+		{"kv_95", "./kv --read-percent=95 --splits=1000 --concurrency=384 " + strings.Join(extraArgs, " ")},
 		// TODO(tamird/petermattis): this configuration has been observed to hang
 		// indefinitely. Re-enable when it is more reliable.
 		//
