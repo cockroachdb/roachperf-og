@@ -16,7 +16,7 @@ echo $GOOGLE_CREDENTIALS > creds.json
 gcloud auth activate-service-account --key-file=creds.json
 
 # It might already exist.
-roachprod -u teamcity create nightly || roachprod sync
+roachprod -u teamcity create teamcity-nightly || roachprod sync
 
 eval $(ssh-agent)
 ssh-add ~/.ssh/google_compute_engine
@@ -32,3 +32,5 @@ roachperf teamcity-nightly put ./kv ./kv
 cd artifacts
 roachperf teamcity-nightly test nightly
 roachperf upload $(ls)
+
+roachprod -u teamcity destroy teamcity-nightly
