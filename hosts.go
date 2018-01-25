@@ -16,6 +16,10 @@ const (
 	local          = "local"
 )
 
+func newInvalidHostsLineErr(line string) error {
+	return fmt.Errorf("invalid hosts line, expected <username>@<host> [locality], got %q", line)
+}
+
 func loadClusters() error {
 	hd := os.ExpandEnv(defaultHostDir)
 	files, err := ioutil.ReadDir(hd)
@@ -40,10 +44,17 @@ func loadClusters() error {
 		}
 
 		for _, l := range lines {
-			if len(l) == 0 {
+			fields := strings.Fields(l)
+			if len(fields) == 0 {
 				continue
+			} else if len(fields[0]) > 0 && fields[0][0] == '#' {
+				// Comment line.
+				continue
+			} else if len(fields) > 2 {
+				return newInvalidHostsLineErr(l)
 			}
-			parts := strings.Split(l, "@")
+
+			parts := strings.Split(fields[0], "@")
 			var n, u string
 			if len(parts) == 1 {
 				user, err := user.Current()
@@ -56,11 +67,17 @@ func loadClusters() error {
 				u = parts[0]
 				n = parts[1]
 			} else {
-				return fmt.Errorf("invalid hosts line, expected <username>@<host>, got %q", l)
+				return newInvalidHostsLineErr(l)
+			}
+
+			var l string
+			if len(fields) == 2 {
+				l = fields[1]
 			}
 
 			c.vms = append(c.vms, n)
 			c.users = append(c.users, u)
+			c.localities = append(c.localities, l)
 		}
 		clusters[file.Name()] = c
 	}

@@ -47,6 +47,9 @@ func (r cockroach) start(c *cluster) {
 		args = append(args, fmt.Sprintf("--max-sql-memory=%d%%", cache))
 		args = append(args, fmt.Sprintf("--port=%d", port))
 		args = append(args, fmt.Sprintf("--http-port=%d", port+1))
+		if locality := c.locality(nodes[i]); locality != "" {
+			args = append(args, "--locality="+locality)
+		}
 		if nodes[i] != 1 {
 			args = append(args, fmt.Sprintf("--join=%s:%d", host1, r.nodePort(c, 1)))
 		}

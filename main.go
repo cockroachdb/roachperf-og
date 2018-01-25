@@ -175,6 +175,7 @@ func newCluster(name string, reserveLoadGen bool) (*cluster, error) {
 
 		c.vms = make([]string, max+1)
 		c.users = make([]string, max+1)
+		c.localities = make([]string, max+1)
 		for i := range c.vms {
 			c.vms[i] = "localhost"
 			c.users[i] = user.Username
