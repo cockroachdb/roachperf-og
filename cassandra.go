@@ -69,8 +69,17 @@ func (cassandra) start(c *cluster) {
 	})
 }
 
-func (cassandra) nodeURL(_ *cluster, host string) string {
-	return fmt.Sprintf("'cassandra://%s:9042'", host)
+func (cassandra) nodeURL(_ *cluster, host string, port int) string {
+	return fmt.Sprintf("'cassandra://%s:%d'", host, port)
+}
+
+func (cassandra) nodePort(c *cluster, index int) int {
+	if c.isLocal() {
+		// TODO(peter): This will require a bit of work to adjust ports in
+		// cassandra.yaml.
+		panic("unimplemented: local cassandra cluster")
+	}
+	return 9042
 }
 
 func makeCassandraYAML(c *cluster) (string, error) {

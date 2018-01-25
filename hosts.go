@@ -13,6 +13,7 @@ import (
 
 const (
 	defaultHostDir = "${HOME}/.roachprod/hosts"
+	local          = "local"
 )
 
 func loadClusters() error {
@@ -62,6 +63,10 @@ func loadClusters() error {
 			c.users = append(c.users, u)
 		}
 		clusters[file.Name()] = c
+	}
+
+	clusters[local] = &cluster{
+		name: local,
 	}
 	return nil
 }
