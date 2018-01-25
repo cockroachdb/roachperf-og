@@ -21,10 +21,11 @@ type clusterImpl interface {
 }
 
 type cluster struct {
-	// name, vms, users are populated at init time.
-	name  string
-	vms   []string
-	users []string
+	// name, vms, users, localities are populated at init time.
+	name       string
+	vms        []string
+	users      []string
+	localities []string
 	// all other fields are populated in newCluster.
 	nodes   []int
 	loadGen int
@@ -40,6 +41,10 @@ func (c *cluster) host(index int) string {
 
 func (c *cluster) user(index int) string {
 	return c.users[index-1]
+}
+
+func (c *cluster) locality(index int) string {
+	return c.localities[index-1]
 }
 
 func (c *cluster) isLocal() bool {
