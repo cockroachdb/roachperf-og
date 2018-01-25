@@ -15,7 +15,8 @@ import (
 
 type clusterImpl interface {
 	start(c *cluster)
-	nodeURL(c *cluster, host string) string
+	nodeURL(c *cluster, host string, port int) string
+	nodePort(c *cluster, index int) int
 }
 
 type cluster struct {
@@ -40,6 +41,10 @@ func (c *cluster) user(index int) string {
 	return c.users[index-1]
 }
 
+func (c *cluster) isLocal() bool {
+	return c.name == local
+}
+
 func (c *cluster) serverNodes() []int {
 	if c.loadGen == -1 {
 		return c.nodes
@@ -55,6 +60,10 @@ func (c *cluster) serverNodes() []int {
 
 // getInternalIP returns the internal IP address of the specified node.
 func (c *cluster) getInternalIP(index int) (string, error) {
+	if c.isLocal() {
+		return c.host(index), nil
+	}
+
 	session, err := newSSHSession(c.user(index), c.host(index))
 	if err != nil {
 		return "", nil
@@ -82,10 +91,11 @@ func (c *cluster) stop() {
 		}
 		defer session.Close()
 
-		const cmd = `
-sudo pkill -9 "cockroach|java|mongo|kv|ycsb" || true ;
-sudo kill -9 $(lsof -t -i :26257 -i :9042) 2>/dev/null || true ;
+		cmd := `pkill -9 "cockroach|java|mongo|kv|ycsb" || true ;
 `
+		cmd += fmt.Sprintf("kill -9 $(lsof -t -i :%d -i :%d) 2>/dev/null || true ;\n",
+			cockroach{}.nodePort(c, c.nodes[i]),
+			cassandra{}.nodePort(c, c.nodes[i]))
 		return session.CombinedOutput(cmd)
 	})
 }
@@ -99,12 +109,18 @@ func (c *cluster) wipe() {
 		}
 		defer session.Close()
 
-		const cmd = `
-sudo pkill -9 "cockroach|java|mongo|kv|ycsb" || true ;
-sudo kill -9 $(lsof -t -i :26257 -i :9042) 2>/dev/null || true ;
-sudo find /mnt/data* -maxdepth 1 -type f -exec rm -f {} \; ;
-sudo rm -fr /mnt/data*/{auxiliary,local,tmp,cassandra,cockroach,cockroach-temp*,mongo-data} \; ;
+		cmd := `pkill -9 "cockroach|java|mongo|kv|ycsb" || true ;
 `
+		cmd += fmt.Sprintf("kill -9 $(lsof -t -i :%d -i :%d) 2>/dev/null || true ;\n",
+			cockroach{}.nodePort(c, c.nodes[i]),
+			cassandra{}.nodePort(c, c.nodes[i]))
+		if c.isLocal() {
+			cmd += `rm -fr ${HOME}/local ;`
+		} else {
+			cmd += `find /mnt/data* -maxdepth 1 -type f -exec rm -f {} \; ;
+rm -fr /mnt/data*/{auxiliary,local,tmp,cassandra,cockroach,cockroach-temp*,mongo-data} \; ;
+`
+		}
 		return session.CombinedOutput(cmd)
 	})
 }
@@ -120,9 +136,11 @@ func (c *cluster) status() {
 		}
 		defer session.Close()
 
-		const cmd = `
-out=$(lsof -i :26257 -i :9042 | awk '!/COMMAND/ {print $1, $2}' | sort | uniq);
-vers=$(./cockroach version 2>/dev/null | awk '/Build Tag:/ {print $NF}')
+		cmd := fmt.Sprintf("out=$(lsof -i :%d -i :%d -sTCP:LISTEN",
+			cockroach{}.nodePort(c, c.nodes[i]),
+			cassandra{}.nodePort(c, c.nodes[i]))
+		cmd += ` | awk '!/COMMAND/ {print $1, $2}' | sort | uniq);
+vers=$(` + binary + ` version 2>/dev/null | awk '/Build Tag:/ {print $NF}')
 if [ -n "${out}" -a -n "${vers}" ]; then
   echo ${out} | sed "s/cockroach/cockroach-${vers}/g"
 else
@@ -196,7 +214,7 @@ func (c *cluster) cockroachVersions() map[string]int {
 		}
 		defer session.Close()
 
-		cmd := "./cockroach version | awk '/Build Tag:/ {print $NF}'"
+		cmd := binary + " version | awk '/Build Tag:/ {print $NF}'"
 		out, err := session.CombinedOutput(cmd)
 		var s string
 		if err != nil {
@@ -251,8 +269,8 @@ func (c *cluster) runLoad(cmd string, stdout, stderr io.Writer) error {
 	fmt.Fprintln(stdout, cmd)
 
 	var urls []string
-	for _, ip := range ips {
-		urls = append(urls, c.impl.nodeURL(c, ip))
+	for i, ip := range ips {
+		urls = append(urls, c.impl.nodeURL(c, ip, c.impl.nodePort(c, nodes[i])))
 	}
 	return session.Run("ulimit -n 16384; " + cmd + " " + strings.Join(urls, " "))
 }
@@ -444,7 +462,9 @@ func (c *cluster) stopLoad() {
 		}
 		defer session.Close()
 
-		const cmd = `sudo kill -9 $(lsof -t -i :26257 -i :9042) 2>/dev/null || true`
+		cmd := fmt.Sprintf("kill -9 $(lsof -t -i :%d -i :%d) 2>/dev/null || true",
+			cockroach{}.nodePort(c, c.nodes[i]),
+			cassandra{}.nodePort(c, c.nodes[i]))
 		return session.CombinedOutput(cmd)
 	})
 }

@@ -14,12 +14,13 @@ func (r cockroach) start(c *cluster) {
 	c.parallel(display, len(nodes), 0, func(i int) ([]byte, error) {
 		host := c.host(nodes[i])
 		user := c.user(nodes[i])
-		join := host1
 		session, err := newSSHSession(user, host)
 		if err != nil {
 			return nil, err
 		}
 		defer session.Close()
+
+		port := r.nodePort(c, nodes[i])
 
 		var args []string
 		if c.secure {
@@ -27,18 +28,32 @@ func (r cockroach) start(c *cluster) {
 		} else {
 			args = append(args, "--insecure")
 		}
-		args = append(args, "--store=path=/mnt/data1/cockroach")
+		dir := "/mnt/data1/cockroach"
+		if c.isLocal() {
+			dir = fmt.Sprintf("${HOME}/local/cockroach%d", nodes[i])
+		}
+		args = append(args, "--store=path="+dir)
 		args = append(args, "--logtostderr")
 		args = append(args, "--log-dir=")
 		args = append(args, "--background")
-		args = append(args, "--cache=25%")
-		args = append(args, "--max-sql-memory=25%")
-		if join != host {
-			args = append(args, "--join="+join)
+		cache := 25
+		if c.isLocal() {
+			cache /= len(nodes)
+			if cache == 0 {
+				cache = 1
+			}
+		}
+		args = append(args, fmt.Sprintf("--cache=%d%%", cache))
+		args = append(args, fmt.Sprintf("--max-sql-memory=%d%%", cache))
+		args = append(args, fmt.Sprintf("--port=%d", port))
+		args = append(args, fmt.Sprintf("--http-port=%d", port+1))
+		if nodes[i] != 1 {
+			args = append(args, fmt.Sprintf("--join=%s:%d", host1, r.nodePort(c, 1)))
 		}
 		args = append(args, c.args...)
-		cmd := c.env + " " + binary + " start " + strings.Join(args, " ") +
-			" > cockroach.stdout 2> cockroach.stderr"
+		cmd := "mkdir -p " + dir + "/logs; " +
+			c.env + " " + binary + " start " + strings.Join(args, " ") +
+			" > " + dir + "/logs/cockroach.stdout 2> " + dir + "/logs/cockroach.stderr"
 		return session.CombinedOutput(cmd)
 	})
 
@@ -62,7 +77,7 @@ func (r cockroach) start(c *cluster) {
 			}
 			defer session.Close()
 
-			cmd := `./cockroach sql --url ` + r.nodeURL(c, "localhost") + ` -e "
+			cmd := binary + ` sql --url ` + r.nodeURL(c, "localhost", r.nodePort(c, 1)) + ` -e "
 set cluster setting kv.allocator.stat_based_rebalancing.enabled = false;
 set cluster setting server.remote_debugging.mode = 'any';
 "`
@@ -79,8 +94,8 @@ set cluster setting server.remote_debugging.mode = 'any';
 	}
 }
 
-func (cockroach) nodeURL(c *cluster, host string) string {
-	url := fmt.Sprintf("'postgres://root@%s:26257", host)
+func (cockroach) nodeURL(c *cluster, host string, port int) string {
+	url := fmt.Sprintf("'postgres://root@%s:%d", host, port)
 	if c.secure {
 		url += "?sslcert=certs%2Fnode.crt&sslkey=certs%2Fnode.key&" +
 			"sslrootcert=certs%2Fca.crt&sslmode=verify-full"
@@ -89,4 +104,13 @@ func (cockroach) nodeURL(c *cluster, host string) string {
 	}
 	url += "'"
 	return url
+}
+
+func (cockroach) nodePort(c *cluster, index int) int {
+	const basePort = 26257
+	port := basePort
+	if c.isLocal() {
+		port += (index - 1) * 2
+	}
+	return port
 }

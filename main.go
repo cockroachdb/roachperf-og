@@ -18,12 +18,16 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/exec"
+	"os/user"
 	"path"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 )
 
@@ -79,6 +83,35 @@ func listNodes(s string, total int) ([]int, error) {
 	return r, nil
 }
 
+func findLocalBinary() error {
+	// For "local" clusters we have to find the binary to run and translate it to
+	// an absolute path. First, look for the binary in PATH.
+	path, err := exec.LookPath(binary)
+	if err != nil {
+		if strings.HasPrefix(binary, "/") {
+			return err
+		}
+		// We're unable to find the binary in PATH and "binary" is a relative path:
+		// look in the cockroach repo.
+		gopath := os.Getenv("GOPATH")
+		if gopath == "" {
+			return err
+		}
+		path = gopath + "/src/github.com/cockroachdb/cockroach/" + binary
+		var err2 error
+		path, err2 = exec.LookPath(path)
+		if err2 != nil {
+			return err
+		}
+	}
+	path, err = filepath.Abs(path)
+	if err != nil {
+		return err
+	}
+	binary = path
+	return nil
+}
+
 var clusters = map[string]*cluster{}
 
 func newCluster(name string, reserveLoadGen bool) (*cluster, error) {
@@ -99,7 +132,18 @@ func newCluster(name string, reserveLoadGen bool) (*cluster, error) {
 		return nil, fmt.Errorf("unknown cluster type: %s", clusterType)
 	}
 
-	nodes, err := listNodes(clusterNodes, len(c.vms))
+	total := len(c.vms)
+	if c.isLocal() {
+		// If ${HOME}/local exists default to the number of nodes in the cluster.
+		if entries, err := filepath.Glob(os.ExpandEnv("${HOME}/local/*")); err == nil {
+			total = len(entries)
+		}
+		if total == 0 {
+			total = 1
+		}
+	}
+
+	nodes, err := listNodes(clusterNodes, total)
 	if err != nil {
 		return nil, err
 	}
@@ -116,6 +160,30 @@ func newCluster(name string, reserveLoadGen bool) (*cluster, error) {
 	c.env = nodeEnv
 	c.args = nodeArgs
 
+	if c.isLocal() {
+		var max int
+		for _, i := range c.nodes {
+			if max < i {
+				max = i
+			}
+		}
+
+		user, err := user.Current()
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to lookup current user")
+		}
+
+		c.vms = make([]string, max+1)
+		c.users = make([]string, max+1)
+		for i := range c.vms {
+			c.vms[i] = "localhost"
+			c.users[i] = user.Username
+		}
+
+		if err := findLocalBinary(); err != nil {
+			return nil, err
+		}
+	}
 	return c, nil
 }
 
@@ -369,8 +437,8 @@ Generate pgurls for the nodes in a cluster.
 		})
 
 		var urls []string
-		for _, ip := range ips {
-			urls = append(urls, c.impl.nodeURL(c, ip))
+		for i, ip := range ips {
+			urls = append(urls, c.impl.nodeURL(c, ip, c.impl.nodePort(c, c.nodes[i])))
 		}
 		fmt.Println(strings.Join(urls, " "))
 		return nil
