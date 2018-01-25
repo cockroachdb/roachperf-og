@@ -7,6 +7,7 @@ import (
 	"math"
 	"os"
 	"os/signal"
+	"sort"
 	"strings"
 	"sync"
 	"syscall"
@@ -507,7 +508,7 @@ func (c *cluster) parallel(display string, count, concurrency int, fn func(i int
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 	complete := make([]bool, count)
-	haveErr := false
+	var failed []result
 
 	var spinner = []string{"|", "/", "-", "\\"}
 	spinnerIdx := 0
@@ -516,6 +517,9 @@ func (c *cluster) parallel(display string, count, concurrency int, fn func(i int
 		select {
 		case <-ticker.C:
 		case r, ok := <-results:
+			if r.err != nil {
+				failed = append(failed, r)
+			}
 			done = !ok
 			if ok {
 				complete[r.index] = true
@@ -540,7 +544,11 @@ func (c *cluster) parallel(display string, count, concurrency int, fn func(i int
 		spinnerIdx++
 	}
 
-	if haveErr {
-		log.Fatal("failed")
+	if len(failed) > 0 {
+		sort.Slice(failed, func(i, j int) bool { return failed[i].index < failed[j].index })
+		for _, f := range failed {
+			fmt.Fprintf(os.Stderr, "%d: %s: %s\n", f.index, f.err, f.out)
+		}
+		log.Fatal("command failed")
 	}
 }
